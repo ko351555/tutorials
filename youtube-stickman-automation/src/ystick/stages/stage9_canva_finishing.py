@@ -16,6 +16,6 @@ class CanvaFinishingStage(Stage):
         out_dir = ctx.project_dir / STAGE_FOLDERS[self.name]
         out_path = out_dir / "branded_cut.mp4"
 
-        fields = {"title": script["chosen_idea"]["title"], "channel_name": ctx.settings.channel.name}
+        fields = {"title": script["chosen_idea"]["title"], "channel_name": ctx.extra["blueprint"].name}
         client.apply_branding(rough_cut, out_path, fields)
         return {"output": str(out_path)}

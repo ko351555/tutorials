@@ -13,7 +13,7 @@ from ystick.core.orchestrator import GATE_AFTER_STAGE, STAGE_TO_GATE, Orchestrat
 from ystick.core.pipeline import STAGE_ORDER
 from ystick.state.models import AWAITING_APPROVAL, DONE, FAILED
 from ystick.ui import gates
-from ystick.ui.helpers import load_ui_meta, save_ui_meta, tail_log
+from ystick.ui.helpers import tail_log
 from ystick.utils.ids import new_project_id
 
 st.set_page_config(page_title="Stickman YouTube Automation", page_icon="🎬", layout="wide")
@@ -44,9 +44,12 @@ def get_orchestrator() -> Orchestrator:
     return Orchestrator()
 
 
-def run_with_progress(orch: Orchestrator, project_id: str, seed_idea: str, mock: bool) -> None:
+def run_with_progress(orch: Orchestrator, project_id: str) -> None:
+    """Runs from wherever the project currently is, using the seed/target
+    length/mock mode recorded in project.json at creation time — nothing
+    to re-specify here."""
     with st.status("Running pipeline…", expanded=True) as box:
-        for event in orch.iter_run(project_id, seed_idea=seed_idea, mock=mock):
+        for event in orch.iter_run(project_id):
             stage = event.get("stage")
             label = STAGE_LABELS.get(stage, stage or "")
             status = event["status"]
@@ -91,18 +94,56 @@ def find_blocking_condition(orch: Orchestrator, project_id: str, status_by_stage
     return None, None
 
 
+def render_how_it_works(orch: Orchestrator) -> None:
+    bp = orch.blueprint
+    with st.expander("ℹ️ How this pipeline starts and ends", expanded=False):
+        st.markdown(
+            f"""
+**Start:** you give it a specific video idea, or leave it blank and it
+picks from **{bp.name}**'s topics ({', '.join(bp.topics)}), scored for
+viral/search/competition/watch-time/monetization potential.
+
+**Then it runs through 10 automated stages** — script → voice → timestamps
+→ storyboard → image prompts → images → video assembly → branding →
+YouTube packaging — pausing only at the approval gates you've enabled
+(shown ⏳ in the tracker above).
+
+**End:** a fully packaged, branded video sitting as a **private** YouTube
+draft with title/description/tags/chapters/thumbnail concept ready — you
+click Publish. Nothing goes live on its own.
+
+Target narration length defaults to **{bp.target_video_length_minutes} min**
+(from `channel_blueprint.yaml`) and is set per-project when you create it —
+see the caption under the project title once a project is selected.
+            """
+        )
+
+
 def sidebar(orch: Orchestrator) -> str | None:
-    st.sidebar.title("🎬 Stickman Automation")
-    st.sidebar.caption("YouTube video pipeline control panel")
+    bp = orch.blueprint
+    st.sidebar.title(f"🎬 {bp.name}")
+    st.sidebar.caption(bp.tagline)
+    with st.sidebar.expander("Channel", expanded=False):
+        st.write(bp.description.strip())
+        st.caption(f"Topics: {', '.join(bp.topics)}")
+        st.caption(f"New video every {bp.upload_cadence_days} days")
+        st.caption(f"[{bp.youtube_url}]({bp.youtube_url})")
+        st.caption(f"Business: {bp.business_email}")
 
     projects = orch.list_projects()
     with st.sidebar.expander("➕ New project", expanded=not projects):
-        idea = st.text_input("Video idea or niche", key="new_idea")
+        idea = st.text_input(
+            "Video idea (optional)",
+            key="new_idea",
+            placeholder=f"Leave blank to auto-pick from: {', '.join(bp.topics)}",
+        )
+        minutes = st.number_input(
+            "Target length (minutes)", min_value=1, max_value=60, value=bp.target_video_length_minutes, key="new_minutes"
+        )
         mock = st.checkbox("Mock mode (no API calls, free)", value=True, key="new_mock")
-        if st.button("Create project", type="primary", use_container_width=True, disabled=not idea.strip()):
-            project_id = new_project_id(idea)
-            orch.init_project(project_id, idea)
-            save_ui_meta(orch.project_dir(project_id), seed_idea=idea, mock=mock)
+        if st.button("Create project", type="primary", use_container_width=True):
+            project_id = new_project_id(idea or bp.name)
+            orch.init_project(project_id, idea, target_minutes=int(minutes), mock=mock)
             st.session_state["current_project"] = project_id
             st.rerun()
 
@@ -130,16 +171,24 @@ def main() -> None:
     orch = get_orchestrator()
     project_id = sidebar(orch)
     if project_id is None:
-        st.title("🎬 Stickman YouTube Automation")
+        st.title(f"🎬 {orch.blueprint.name}")
         st.write("Create a project in the sidebar to get started.")
+        render_how_it_works(orch)
         return
 
     st.session_state["current_project"] = project_id
     project_dir = orch.project_dir(project_id)
-    meta = load_ui_meta(project_dir)
+    meta = orch.load_project_meta(project_id)
     advanced_panel(orch, project_id)
 
     st.title(project_id)
+    st.caption(
+        f"**Topic:** {meta['seed_idea'] or '(auto — picked from channel topics)'}  ·  "
+        f"**Target length:** {meta['target_minutes']} min  ·  "
+        f"**Mode:** {'mock (no API calls)' if meta['mock'] else 'live'}"
+    )
+    render_how_it_works(orch)
+
     states = orch.status(project_id)
     status_by_stage = {s.stage: s for s in states}
     render_stage_tracker(status_by_stage)
@@ -154,7 +203,7 @@ def main() -> None:
             f"Stage **{STAGE_LABELS[stage_name]}** failed (attempt {s.attempts}):\n\n```\n{s.last_error}\n```"
         )
         if st.button("🔁 Retry", type="primary"):
-            run_with_progress(orch, project_id, meta["seed_idea"], meta["mock"])
+            run_with_progress(orch, project_id)
     elif kind == "awaiting_approval":
         GATE_RENDERERS[detail](orch, project_id, project_dir)
     elif all(s.status == DONE for s in states):
@@ -163,7 +212,7 @@ def main() -> None:
     else:
         st.info("Ready to run." + (" (mock mode)" if meta["mock"] else ""))
         if st.button("▶️ Run pipeline", type="primary"):
-            run_with_progress(orch, project_id, meta["seed_idea"], meta["mock"])
+            run_with_progress(orch, project_id)
 
     with st.expander("📁 Project assets"):
         gates.render_asset_browser(project_dir)

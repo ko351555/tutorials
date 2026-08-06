@@ -5,9 +5,9 @@ from ystick.core.exceptions import FatalError
 from ystick.core.pipeline import STAGE_FOLDERS, ProjectContext, Stage
 from ystick.utils.files import read_json, write_json
 
-SYSTEM_PROMPT = """You are a scriptwriter for a stickman/doodle educational
-YouTube channel. Follow the channel style guide exactly. Output plain
-narration text only — no scene directions, no markdown headers."""
+SYSTEM_PROMPT_TEMPLATE = """You are a scriptwriter for "{name}" — {tagline}
+Follow the channel style guide exactly. Output plain narration text only —
+no scene directions, no markdown headers."""
 
 PROMPT_TEMPLATE = """Channel style guide:
 ---
@@ -37,14 +37,16 @@ class ScriptGenerationStage(Stage):
 
         style_guide_path = PROJECT_ROOT / ctx.settings.channel.style_guide_path
         style_guide = style_guide_path.read_text()
+        blueprint = ctx.extra["blueprint"]
 
+        system_prompt = SYSTEM_PROMPT_TEMPLATE.format(name=blueprint.name, tagline=blueprint.tagline)
         prompt = PROMPT_TEMPLATE.format(
             style_guide=style_guide,
             title=chosen["title"],
             pitch=chosen["one_line_pitch"],
-            minutes=ctx.settings.channel.target_video_length_minutes,
+            minutes=ctx.extra["target_minutes"],
         )
-        script_text = ctx.extra["llm"].complete(prompt, system=SYSTEM_PROMPT, mock_key="script")
+        script_text = ctx.extra["llm"].complete(prompt, system=system_prompt, mock_key="script")
 
         out_dir = ctx.project_dir / STAGE_FOLDERS[self.name]
         out_dir.mkdir(parents=True, exist_ok=True)

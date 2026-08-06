@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 import typer
 
 from ystick.approvals import describe_pending
@@ -12,32 +14,53 @@ app = typer.Typer(help="Automation pipeline for stickman/doodle YouTube videos."
 
 
 @app.command()
-def new(idea: str, mock: bool = typer.Option(False, help="Run with no external API calls (fixture data).")):
-    """Create a project from a video idea or niche, and run it up to the first approval gate."""
-    project_id = new_project_id(idea)
+def new(
+    idea: str = typer.Argument(
+        "", help="A specific video idea, or blank to auto-pick from the channel's topics (config/channel_blueprint.yaml)."
+    ),
+    minutes: Optional[int] = typer.Option(
+        None, "--minutes", help="Target narration length in minutes. Defaults to channel_blueprint.yaml's target_video_length_minutes."
+    ),
+    mock: bool = typer.Option(False, help="Run with no external API calls (fixture data)."),
+):
+    """Create a project from a video idea (or blank for the channel's default topics), and run it up to the first approval gate."""
     orch = Orchestrator()
-    orch.init_project(project_id, idea)
+    project_id = new_project_id(idea or orch.blueprint.name)
+    orch.init_project(project_id, idea, target_minutes=minutes, mock=mock)
+    meta = orch.load_project_meta(project_id)
     log = configure_logging(project_id)
     typer.echo(f"Created project: {project_id}")
-    _run_and_report(orch, project_id, idea, mock, log)
+    typer.echo(f"  Topic seed:    {idea or '(blank — will auto-pick from channel topics)'}")
+    typer.echo(f"  Target length: {meta['target_minutes']} min")
+    typer.echo(f"  Mode:          {'mock (no API calls)' if mock else 'live'}")
+    _run_and_report(orch, project_id, log)
 
 
 @app.command()
 def run(
     project_id: str,
-    mock: bool = typer.Option(False, help="Run with no external API calls (fixture data)."),
+    mock: Optional[bool] = typer.Option(
+        None, "--mock/--no-mock", help="Override the mode stored at creation time for this run."
+    ),
     force: bool = typer.Option(False, help="Re-run stages even if already marked done."),
 ):
     """Resume/continue a project's pipeline from wherever it left off."""
     orch = Orchestrator()
     log = configure_logging(project_id)
-    _run_and_report(orch, project_id, "", mock, log, force=force)
+    _run_and_report(orch, project_id, log, mock=mock, force=force)
 
 
 @app.command()
 def status(project_id: str):
-    """Show per-stage status for a project."""
+    """Show per-stage status for a project, plus what it was set up to make."""
     orch = Orchestrator()
+    meta = orch.load_project_meta(project_id)
+    typer.echo(
+        f"Topic seed: {meta['seed_idea'] or '(auto from channel topics)'}  |  "
+        f"Target length: {meta['target_minutes']} min  |  "
+        f"Mode: {'mock' if meta['mock'] else 'live'}"
+    )
+    typer.echo("")
     for s in orch.status(project_id):
         typer.echo(f"{s.stage:20s} {s.status:18s} attempts={s.attempts} last_error={s.last_error or '-'}")
 
@@ -66,8 +89,8 @@ def force_from(project_id: str, stage: str):
     typer.echo(f"Reset {project_id} from {stage} onward.")
 
 
-def _run_and_report(orch: Orchestrator, project_id: str, seed_idea: str, mock: bool, log, force: bool = False):
-    result = orch.run(project_id, seed_idea=seed_idea, mock=mock, log=log, force=force)
+def _run_and_report(orch: Orchestrator, project_id: str, log, mock: Optional[bool] = None, force: bool = False):
+    result = orch.run(project_id, mock=mock, log=log, force=force)
     if result == "done":
         typer.echo(f"[{project_id}] pipeline complete.")
     elif result == "awaiting_approval":

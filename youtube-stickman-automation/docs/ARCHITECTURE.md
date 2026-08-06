@@ -85,7 +85,7 @@ Design principles:
 ## 2. Workflow Diagram (stage detail + data flow)
 
 ```
- [ niche or idea ] 
+ [ idea (optional) ]  -- blank falls back to config/channel_blueprint.yaml's topics
         │
         ▼
  ┌────────────────┐   writes ideas.json (5-8 scored ideas)
@@ -187,6 +187,7 @@ youtube-stickman-automation/
 ├── config/
 │   ├── settings.yaml                # provider choices, model names, approval toggles
 │   ├── scoring_weights.yaml         # Stage 1 idea-scoring rubric weights
+│   ├── channel_blueprint.yaml       # channel identity: name, topics, cadence, contact, default length
 │   ├── channel_style_guide.md       # narration voice/tone/structure rules (fill in yours)
 │   └── visual_blueprint.md          # stickman style, palette, character sheet (fill in yours)
 ├── src/ystick/
@@ -465,11 +466,14 @@ the pipeline more, or up while testing a new niche/style.
 
 ## 10. Step-by-Step Implementation Plan
 
-1. **Fill in the two blueprint files** — `config/channel_style_guide.md`
-   (narration voice, pacing, CTA conventions) and
-   `config/visual_blueprint.md` (character sheet, palette, line weight,
-   background style). These are the actual creative IP; the pipeline is
-   worthless without them being specific.
+1. **Fill in the three blueprint files** — `config/channel_blueprint.yaml`
+   (channel identity: name, topics, upload cadence, contact, default video
+   length), `config/channel_style_guide.md` (narration voice, pacing, CTA
+   conventions), and `config/visual_blueprint.md` (character sheet,
+   palette, line weight, background style). These are the actual creative
+   IP; the pipeline is worthless without them being specific. The channel
+   blueprint is what Stage 1 falls back to when a project is created with
+   no explicit idea, and what the UI shows as branding.
 2. **Set `.env`** from `.env.example`: ElevenLabs API key + voice_id, image-gen
    API key, Canva Connect credentials + brand template_id, YouTube OAuth
    client. Claude Code needs no key (see §6).

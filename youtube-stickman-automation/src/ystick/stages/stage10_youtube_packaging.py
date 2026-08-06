@@ -7,16 +7,20 @@ from ystick.utils.files import parse_json_loose, read_json, write_json
 SYSTEM_PROMPT = """You are a YouTube growth strategist. Respond with ONLY a
 JSON object, no prose."""
 
-PROMPT_TEMPLATE = """Video title/topic: {title}
+PROMPT_TEMPLATE = """Channel: {channel_name} — {tagline}
+Business inquiries: {business_email}
+Channel URL: {youtube_url}
+
+Video title/topic: {title}
 Script excerpt (first 1000 chars): {script_excerpt}
 Number of scenes: {num_scenes}
 
 Generate a JSON object with keys:
 title (viral, <=100 chars), description (SEO-optimized, includes a natural
-CTA), tags (array of 15-20 strings), thumbnail_text (<=5 words),
-thumbnail_concept (one sentence describing the visual), chapters (array of
-{{"time","label"}}), pinned_comment, community_post, shorts_title,
-shorts_description.
+CTA and a one-line business-inquiries mention at the end), tags (array of
+15-20 strings), thumbnail_text (<=5 words), thumbnail_concept (one sentence
+describing the visual), chapters (array of {{"time","label"}}),
+pinned_comment, community_post, shorts_title, shorts_description.
 """
 
 
@@ -26,8 +30,13 @@ class YoutubePackagingStage(Stage):
     def run(self, ctx: ProjectContext) -> dict:
         script = read_json(ctx.project_dir / STAGE_FOLDERS["script_generation"] / "script.json")
         storyboard = read_json(ctx.project_dir / STAGE_FOLDERS["scene_planning"] / "storyboard.json")
+        blueprint = ctx.extra["blueprint"]
 
         prompt = PROMPT_TEMPLATE.format(
+            channel_name=blueprint.name,
+            tagline=blueprint.tagline,
+            business_email=blueprint.business_email,
+            youtube_url=blueprint.youtube_url,
             title=script["chosen_idea"]["title"],
             script_excerpt=script["text"][:1000],
             num_scenes=len(storyboard),

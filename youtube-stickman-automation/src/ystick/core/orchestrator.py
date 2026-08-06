@@ -9,16 +9,20 @@ the final outcome.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, TypedDict
 
-from ystick.config import PROJECT_ROOT, AttrDict, Secrets, load_secrets, load_settings
+from ystick.config import PROJECT_ROOT, AttrDict, Secrets, load_blueprint, load_secrets, load_settings
 from ystick.core.exceptions import FatalError, RetryableError
 from ystick.core.pipeline import STAGE_FOLDERS, STAGE_ORDER, ProjectContext
 from ystick.integrations.llm_client import LLMClient
 from ystick.state.models import AWAITING_APPROVAL, DONE, FAILED, RUNNING
 from ystick.state.store import StateStore
+from ystick.utils.files import read_json, write_json
 from ystick.utils.retry import retrying
+
+PROJECT_META_FILENAME = "project.json"
 
 # gate name -> stage after which it fires, as configured in settings.yaml -> approvals
 GATE_AFTER_STAGE = {
@@ -70,6 +74,7 @@ class Orchestrator:
     def __init__(self, projects_root: Path | None = None):
         self.settings: AttrDict = load_settings()
         self.secrets: Secrets = load_secrets()
+        self.blueprint: AttrDict = load_blueprint(self.settings)
         self.projects_root = projects_root or PROJECT_ROOT / "data" / "projects"
         self.store = StateStore(self.projects_root / "runs.db")
         self.stages = _build_stage_registry()
@@ -77,30 +82,67 @@ class Orchestrator:
     def project_dir(self, project_id: str) -> Path:
         return self.projects_root / project_id
 
-    def init_project(self, project_id: str, seed_idea: str) -> None:
-        self.store.ensure_project(project_id, STAGE_ORDER)
-        (self.project_dir(project_id)).mkdir(parents=True, exist_ok=True)
+    def _project_meta_path(self, project_id: str) -> Path:
+        return self.project_dir(project_id) / PROJECT_META_FILENAME
 
-    def _build_context(self, project_id: str, seed_idea: str, mock: bool, log) -> ProjectContext:
+    def init_project(
+        self, project_id: str, seed_idea: str = "", *, target_minutes: int | None = None, mock: bool = False
+    ) -> None:
+        """Creates the project and durably records what it was asked to
+        make: the seed idea (or blank for "auto-pick from channel topics"),
+        the target narration length, and whether it runs in mock mode. This
+        is the single source of truth both the CLI and UI read from on every
+        subsequent `run`/`iter_run` call — no need to re-pass it each time,
+        and no drift between the two front ends."""
+        self.store.ensure_project(project_id, STAGE_ORDER)
+        self.project_dir(project_id).mkdir(parents=True, exist_ok=True)
+        write_json(
+            self._project_meta_path(project_id),
+            {
+                "seed_idea": seed_idea,
+                "target_minutes": target_minutes or self.blueprint.target_video_length_minutes,
+                "mock": mock,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+    def load_project_meta(self, project_id: str) -> dict:
+        path = self._project_meta_path(project_id)
+        if not path.exists():
+            return {"seed_idea": "", "target_minutes": self.blueprint.target_video_length_minutes, "mock": True}
+        return read_json(path)
+
+    def _build_context(self, project_id: str, seed_idea: str | None, mock: bool | None, log) -> ProjectContext:
+        meta = self.load_project_meta(project_id)
+        resolved_seed = seed_idea if seed_idea else meta["seed_idea"]
+        resolved_mock = mock if mock is not None else meta["mock"]
         approvals = {gate: self.store.get_approval(project_id, gate) for gate in GATE_AFTER_STAGE}
         return ProjectContext(
             project_id=project_id,
             project_dir=self.project_dir(project_id),
             settings=self.settings,
             secrets=self.secrets,
-            mock=mock,
-            seed_idea=seed_idea,
+            mock=resolved_mock,
+            seed_idea=resolved_seed,
             log=log,
-            extra={"llm": LLMClient(self.secrets, mock=mock), "approvals": approvals},
+            extra={
+                "llm": LLMClient(self.secrets, mock=resolved_mock),
+                "approvals": approvals,
+                "blueprint": self.blueprint,
+                "target_minutes": meta["target_minutes"],
+            },
         )
 
     def iter_run(
-        self, project_id: str, *, seed_idea: str = "", mock: bool = False, log=None, force: bool = False
+        self, project_id: str, *, seed_idea: str = "", mock: bool | None = None, log=None, force: bool = False
     ) -> Iterator[StageEvent]:
         """Yields one StageEvent per stage as it's processed, stopping as
         soon as an approval gate or failure blocks further progress (or the
         pipeline completes). Safe to call repeatedly/resume at any point —
-        already-`done` stages are yielded as `skipped` and cost nothing."""
+        already-`done` stages are yielded as `skipped` and cost nothing.
+        `seed_idea`/`mock` only need to be passed at creation time (they're
+        persisted by `init_project`) — omit them on resume calls and the
+        stored values are used."""
         ctx = self._build_context(project_id, seed_idea, mock, log)
         retry_cfg = self.settings.retry
 
@@ -163,7 +205,7 @@ class Orchestrator:
 
         yield {"stage": None, "status": "pipeline_done"}
 
-    def run(self, project_id: str, *, seed_idea: str = "", mock: bool = False, log=None, force: bool = False) -> str:
+    def run(self, project_id: str, *, seed_idea: str = "", mock: bool | None = None, log=None, force: bool = False) -> str:
         """Drains iter_run and returns the final outcome:
         'done' | 'awaiting_approval' | 'failed'."""
         last: StageEvent = {"status": "done"}

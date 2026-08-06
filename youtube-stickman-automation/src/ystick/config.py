@@ -96,3 +96,15 @@ def load_settings(settings_path: Path | None = None) -> AttrDict:
 
 def load_secrets() -> Secrets:
     return Secrets()
+
+
+def load_blueprint(settings: AttrDict | None = None) -> AttrDict:
+    """The channel identity layer: who this channel is, what it covers, how
+    often it posts. Distinct from settings.yaml (pipeline knobs) and the
+    style/visual guides (how it sounds/looks) — this is what topic discovery
+    falls back to when given no explicit idea, and what the UI shows as
+    channel branding. See config/channel_blueprint.yaml."""
+    settings = settings or load_settings()
+    blueprint_path = PROJECT_ROOT / settings.channel.blueprint_path
+    raw = yaml.safe_load(blueprint_path.read_text())
+    return AttrDict(raw)

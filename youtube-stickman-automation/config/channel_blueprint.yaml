@@ -1,0 +1,34 @@
+# The channel identity layer — who this channel is, what it covers, how
+# often it posts, and where topic discovery falls back to when you give it
+# no explicit idea (just run `ystick new` with a blank idea, or click
+# "Create project" in the UI with the idea field empty).
+#
+# This is distinct from:
+#   - channel_style_guide.md   -> how scripts should sound
+#   - visual_blueprint.md      -> how images should look
+# Both of those can reference this file's tone (see their headers).
+
+name: "The Stickman Blueprint"
+tagline: "Complex ideas. Simple visuals. Actionable frameworks."
+description: |
+  Stickman guides to psychology, wealth, productivity and AI.
+  Complex ideas. Simple visuals. Actionable frameworks.
+
+youtube_url: "https://www.youtube.com/@TheStickmanBlueprint"
+business_email: "wealthalertsnow@gmail.com"
+
+# Used by Stage 1 as the fallback niche list when a project is created with
+# no specific idea — topic discovery is told to pick from these.
+topics:
+  - money
+  - mindset
+  - career growth
+  - habits
+  - AI
+  - self improvement
+
+upload_cadence_days: 14
+
+# Default narration length for a new project (minutes). Overridable per
+# project in the UI's "New project" form or via `ystick new --minutes N`.
+target_video_length_minutes: 8

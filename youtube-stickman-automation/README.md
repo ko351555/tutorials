@@ -17,17 +17,19 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e .
 
 cp .env.example .env        # fill in API keys (see .env.example for which stages need what)
-# Fill in the two files that make this YOUR channel:
-#   config/channel_style_guide.md
-#   config/visual_blueprint.md
+# Fill in the three files that make this YOUR channel:
+#   config/channel_blueprint.yaml  — identity: name, topics, cadence, contact, default video length
+#   config/channel_style_guide.md  — how scripts should sound
+#   config/visual_blueprint.md     — how images should look
 
-# Dry run — exercises the full pipeline with fixture data, no API calls, no cost:
-ystick new "why octopuses have three hearts" --mock
+# Dry run — exercises the full pipeline with fixture data, no API calls, no cost.
+# Leave the idea blank to auto-pick from channel_blueprint.yaml's topics:
+ystick new --mock
 ystick run <project_id>
-ystick status <project_id>
+ystick status <project_id>   # shows the topic seed, target length, and mode it's running with
 
-# Once .env has real keys, drop --mock:
-ystick new "why octopuses have three hearts"
+# A specific idea, custom length, once .env has real keys:
+ystick new "why octopuses have three hearts" --minutes 10
 ystick run <project_id>
 ```
 

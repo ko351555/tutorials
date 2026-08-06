@@ -1,8 +1,12 @@
 """Small utilities shared by the Streamlit pages — kept out of app.py/gates.py
-so those stay focused on layout."""
+so those stay focused on layout.
+
+Project metadata (seed idea, target length, mock mode) is NOT duplicated
+here — it lives in `data/projects/<id>/project.json`, owned by
+`Orchestrator.init_project`/`load_project_meta`, so the CLI and UI can
+never drift out of sync on what a project was set up to make."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import streamlit as st
@@ -13,21 +17,6 @@ from ystick.config import PROJECT_ROOT
 # bytes of literal text) rather than real media, so we show a caption
 # instead of asking st.audio/st.video to render garbage.
 _MOCK_MEDIA_SIZE_THRESHOLD = 2048
-
-
-def ui_meta_path(project_dir: Path) -> Path:
-    return project_dir / "ui_meta.json"
-
-
-def save_ui_meta(project_dir: Path, *, seed_idea: str, mock: bool) -> None:
-    ui_meta_path(project_dir).write_text(json.dumps({"seed_idea": seed_idea, "mock": mock}))
-
-
-def load_ui_meta(project_dir: Path) -> dict:
-    path = ui_meta_path(project_dir)
-    if not path.exists():
-        return {"seed_idea": "", "mock": True}
-    return json.loads(path.read_text())
 
 
 def safe_audio(path: Path, label: str = "Narration") -> None:
