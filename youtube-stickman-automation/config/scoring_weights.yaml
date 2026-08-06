@@ -1,0 +1,31 @@
+# Stage 1 idea-scoring rubric. Each idea gets 1-10 on every criterion;
+# weighted_score = sum(score_i * weight_i). Tune these to match what
+# actually matters for your channel's goals (subs vs. RPM vs. authority).
+
+criteria:
+  viral_potential:
+    weight: 0.30
+    description: >
+      Hook strength, shareability, novelty/surprise factor, thumbnail-ability.
+  search_demand:
+    weight: 0.20
+    description: >
+      Evidence of existing search/interest for this topic or close variants
+      (title patterns that already perform well in the niche).
+  competition:
+    weight: 0.15
+    description: >
+      Inverted — 10 means a gap other channels haven't filled well; 1 means
+      saturated with strong existing videos.
+  watch_time_potential:
+    weight: 0.20
+    description: >
+      Does the topic naturally sustain 6-10+ minutes of narrative without
+      padding? Story/mystery/list structure scores higher than a single fact.
+  monetization_potential:
+    weight: 0.15
+    description: >
+      Advertiser-friendly, CPM-favorable niche/topic, natural sponsor or
+      affiliate tie-in potential.
+
+minimum_weighted_score_to_shortlist: 6.0

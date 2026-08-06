@@ -1,0 +1,52 @@
+# Pipeline-wide configuration. Secrets go in .env, not here.
+
+channel:
+  name: "Change Me"
+  style_guide_path: "config/channel_style_guide.md"
+  visual_blueprint_path: "config/visual_blueprint.md"
+  target_video_length_minutes: 8
+
+approvals:
+  topic_selection: true
+  script_review: false
+  storyboard_review: false
+  final_review: true
+
+retry:
+  max_attempts: 5
+  initial_backoff_seconds: 2
+  max_backoff_seconds: 60
+
+stages:
+  topic_discovery:
+    num_ideas: 6
+    scoring_weights_path: "config/scoring_weights.yaml"
+  script_generation:
+    model: "claude"
+  voice_generation:
+    provider: "elevenlabs"
+    max_chars_per_request: 4500
+  timestamps:
+    provider: "${TRANSCRIPTION_PROVIDER}"
+  scene_planning:
+    min_scene_seconds: 3
+    max_scene_seconds: 12
+  image_prompts:
+    style_lock: true
+  image_generation:
+    provider: "${IMAGE_GEN_PROVIDER}"
+    cache_by_content_hash: true
+  video_assembly:
+    fps: 30
+    resolution: "1920x1080"
+    ken_burns: true
+    subtitles: true
+    hero_clips_dir: "08_assembly/hero_clips"
+  canva_finishing:
+    template_id: "${CANVA_BRAND_TEMPLATE_ID}"
+  youtube_packaging:
+    upload_as: "private"
+    generate_shorts_variant: true
+
+budget:
+  max_image_gen_credits_per_project: 60

@@ -1,0 +1,29 @@
+[project]
+name = "ystick"
+version = "0.1.0"
+description = "Automation pipeline for stickman/doodle YouTube explainer videos"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "tenacity>=8.2",
+    "structlog>=24.1",
+    "requests>=2.31",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+whisper = ["faster-whisper>=1.0"]
+browser = ["playwright>=1.42"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0"]
+
+[project.scripts]
+ystick = "ystick.cli:app"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
