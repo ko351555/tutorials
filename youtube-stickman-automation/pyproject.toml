@@ -16,10 +16,12 @@ dependencies = [
 [project.optional-dependencies]
 whisper = ["faster-whisper>=1.0"]
 browser = ["playwright>=1.42"]
+ui = ["streamlit>=1.32"]
 dev = ["pytest>=8.0", "pytest-cov>=5.0"]
 
 [project.scripts]
 ystick = "ystick.cli:app"
+ystick-ui = "ystick.ui.launcher:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

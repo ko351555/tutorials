@@ -38,6 +38,27 @@ print what to do next:
 ystick approve <project_id> --stage topic_selection --select 2
 ```
 
+## Interactive UI
+
+For the full click-through experience — scored idea cards, an editable
+script box, a live storyboard table, audio/image/video previews, and a
+step-by-step progress tracker — run the Streamlit dashboard instead of the
+CLI:
+
+```bash
+pip install -e '.[ui]'
+ystick-ui
+```
+
+This opens a local browser tab (`localhost:8501`) with a project sidebar,
+a 10-stage progress tracker, and a "Run pipeline" button that streams live
+per-stage status. Every approval gate renders as a proper review screen —
+pick a topic by clicking a card, edit the script inline, review the
+storyboard as a table, watch the final cut before it's packaged — instead
+of reading JSON in a terminal. See
+[`docs/ARCHITECTURE.md` §11](docs/ARCHITECTURE.md#11-interactive-ui) for
+how it's wired to the same orchestrator as the CLI.
+
 ## Project layout
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#4-folder-structure) for the

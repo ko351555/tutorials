@@ -174,6 +174,7 @@ Design principles:
 | CLI | **Typer** | Thin, typed CLI (`ystick new`, `ystick run`, `ystick approve`, `ystick status`) with near-zero boilerplate. |
 | Media processing | **ffmpeg-python** / raw `ffmpeg` subprocess | Deterministic, scriptable, free, no rate limits — the one piece of the pipeline you fully control. |
 | Browser automation (fallback only) | **Playwright** | Reserved for the few surfaces with no API (FoziScribe if it stays API-less, Canva as a fallback, community posts) — isolated behind the same integration interfaces so it's opt-in and swappable. |
+| Interactive UI | **Streamlit** | A local control-panel UI needs real widgets — audio players, image grids, a video player for final review — not a terminal. Streamlit gets all of that natively with almost no frontend code, sits directly on top of the same `Orchestrator`/`StateStore` the CLI uses (no separate API layer to maintain), and is the standard choice for exactly this kind of single-operator content-pipeline dashboard. See §11. |
 
 ---
 
@@ -219,6 +220,11 @@ youtube-stickman-automation/
 │   │   ├── stage8_video_assembly.py
 │   │   ├── stage9_canva_finishing.py
 │   │   └── stage10_youtube_packaging.py
+│   ├── ui/                          # Streamlit dashboard — see §11
+│   │   ├── app.py                   # entrypoint: sidebar, stage tracker, run control
+│   │   ├── gates.py                 # per-gate review screens + results view
+│   │   ├── helpers.py               # cached orchestrator, safe media rendering
+│   │   └── launcher.py              # `ystick-ui` console script
 │   └── utils/
 │       ├── retry.py
 │       ├── ids.py
@@ -487,3 +493,53 @@ the pipeline more, or up while testing a new niche/style.
    you're comfortable running unattended.
 10. **(Optional) Move to batch/parallel** once producing more than ~1
     video/day, per §9.
+
+---
+
+## 11. Interactive UI
+
+Running everything through the CLI is fine for automation, but reviewing a
+storyboard or a generated character image as raw JSON in a terminal is not
+a real workflow. `src/ystick/ui/` is a Streamlit dashboard built directly
+on the same `Orchestrator`/`StateStore` the CLI uses — no separate API
+layer, no state duplication, no drift between the two.
+
+```bash
+pip install -e '.[ui]'
+ystick-ui           # opens http://localhost:8501
+```
+
+What it gives you that the CLI can't:
+
+- **Live stage tracker** — all 10 stages as a row of status icons
+  (pending/running/awaiting-approval/done/failed), updated in real time as
+  `Orchestrator.iter_run()` streams one event per stage.
+- **Real approval screens, not JSON dumps** — topic selection renders as
+  scored, clickable idea cards; script review is an editable text box that
+  writes straight back to `script.md`/`script.json`; storyboard review is a
+  proper table of scene timing/pacing; final review plays the actual
+  branded cut with `st.video`.
+- **Asset browser** — script text, a narration audio player, the generated
+  image grid, and the storyboard table, all in one expandable panel so you
+  can sanity-check any stage's output without touching the filesystem.
+- **One-click retry** — a failed stage shows its error inline with a Retry
+  button that re-invokes the same resumable `iter_run()` the CLI uses, so
+  behavior is identical either way.
+- **Advanced panel** — a `force-from` reset exposed as a dropdown, for
+  power users who want to re-run from a specific stage without deleting
+  existing output.
+
+Architecturally, `iter_run()` (in `core/orchestrator.py`) is what makes
+this possible: it's a generator that yields one `StageEvent` per stage
+(`running` → `done`/`failed`/`awaiting_approval`) instead of blocking until
+the whole run finishes. The CLI's `run()` is now just `iter_run()` drained
+to its last event — the UI and CLI share one code path end to end, so a
+bug fix or new stage never needs to be wired up twice.
+
+The dashboard is a single-operator local tool by design (matches the
+system's overall v1 scope in §9) — it talks to the same on-disk
+`data/projects/` and `runs.db` the CLI does, so you can freely switch
+between clicking through the UI and resuming the same project from the
+CLI (`ystick run <project_id>`) mid-pipeline. This was verified end-to-end
+with a scripted browser test driving the real app through every stage and
+every approval gate to completion.
