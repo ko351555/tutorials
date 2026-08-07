@@ -17,6 +17,7 @@ import requests
 
 from ystick.config import Secrets
 from ystick.core.exceptions import FatalError, RetryableError
+from ystick.utils.http_errors import is_quota_exhausted
 
 OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations"
 OPENAI_IMAGE_EDITS_URL = "https://api.openai.com/v1/images/edits"
@@ -65,6 +66,11 @@ class ImageGenClient:
         except requests.RequestException as exc:
             raise RetryableError(f"image gen request failed: {exc}") from exc
 
+        if is_quota_exhausted(resp.status_code, resp.text):
+            raise FatalError(
+                f"image gen out of credits/quota — add billing at "
+                f"platform.openai.com before retrying: {resp.text[:500]}"
+            )
         if resp.status_code >= 500 or resp.status_code == 429:
             raise RetryableError(f"image gen {resp.status_code}: {resp.text[:500]}")
         if resp.status_code >= 400:

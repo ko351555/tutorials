@@ -8,6 +8,7 @@ import requests
 
 from ystick.config import Secrets
 from ystick.core.exceptions import FatalError, RetryableError
+from ystick.utils.http_errors import is_quota_exhausted
 
 TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 
@@ -44,6 +45,8 @@ class ElevenLabsClient:
         except requests.RequestException as exc:
             raise RetryableError(f"ElevenLabs request failed: {exc}") from exc
 
+        if is_quota_exhausted(resp.status_code, resp.text):
+            raise FatalError(f"ElevenLabs out of credits/quota — check your plan: {resp.text[:500]}")
         if resp.status_code >= 500 or resp.status_code == 429:
             raise RetryableError(f"ElevenLabs {resp.status_code}: {resp.text[:500]}")
         if resp.status_code >= 400:
