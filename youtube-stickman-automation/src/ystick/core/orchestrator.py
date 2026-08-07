@@ -9,6 +9,7 @@ the final outcome.
 """
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, TypedDict
@@ -40,6 +41,7 @@ class StageEvent(TypedDict, total=False):
     gate: str
     summary: dict
     error: str
+    duration_s: float
 
 
 def _build_stage_registry():
@@ -168,6 +170,7 @@ class Orchestrator:
             yield {"stage": stage_name, "status": "running"}
             if log:
                 log.info("stage_start", stage=stage_name)
+            started_at = time.monotonic()
             try:
                 wrapped = retrying(
                     max_attempts=retry_cfg.max_attempts,
@@ -176,20 +179,23 @@ class Orchestrator:
                 )(self.stages[stage_name].run)
                 summary = wrapped(ctx)
             except (FatalError, RetryableError) as exc:
+                duration_s = round(time.monotonic() - started_at, 1)
                 self.store.set_status(project_id, stage_name, FAILED, error=str(exc))
                 if log:
-                    log.error("stage_failed", stage=stage_name, error=str(exc))
-                yield {"stage": stage_name, "status": "failed", "error": str(exc)}
+                    log.error("stage_failed", stage=stage_name, error=str(exc), duration_s=duration_s)
+                yield {"stage": stage_name, "status": "failed", "error": str(exc), "duration_s": duration_s}
                 return
             except Exception as exc:  # noqa: BLE001 - last-resort safety net
+                duration_s = round(time.monotonic() - started_at, 1)
                 self.store.set_status(project_id, stage_name, FAILED, error=repr(exc))
                 if log:
-                    log.error("stage_failed_unexpected", stage=stage_name, error=repr(exc))
-                yield {"stage": stage_name, "status": "failed", "error": repr(exc)}
+                    log.error("stage_failed_unexpected", stage=stage_name, error=repr(exc), duration_s=duration_s)
+                yield {"stage": stage_name, "status": "failed", "error": repr(exc), "duration_s": duration_s}
                 return
+            duration_s = round(time.monotonic() - started_at, 1)
 
             if log:
-                log.info("stage_complete", stage=stage_name, summary=summary)
+                log.info("stage_complete", stage=stage_name, summary=summary, duration_s=duration_s)
 
             gate = STAGE_TO_GATE.get(stage_name)
             gate_enabled = gate and self.settings.approvals.get(gate, False)
@@ -197,11 +203,11 @@ class Orchestrator:
                 self.store.set_status(project_id, stage_name, AWAITING_APPROVAL)
                 if log:
                     log.info("awaiting_approval", stage=stage_name, gate=gate)
-                yield {"stage": stage_name, "status": "awaiting_approval", "gate": gate, "summary": summary}
+                yield {"stage": stage_name, "status": "awaiting_approval", "gate": gate, "summary": summary, "duration_s": duration_s}
                 return
 
             self.store.set_status(project_id, stage_name, DONE)
-            yield {"stage": stage_name, "status": "done", "summary": summary}
+            yield {"stage": stage_name, "status": "done", "summary": summary, "duration_s": duration_s}
 
         yield {"stage": None, "status": "pipeline_done"}
 

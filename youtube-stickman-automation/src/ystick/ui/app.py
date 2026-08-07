@@ -48,24 +48,40 @@ def run_with_progress(orch: Orchestrator, project_id: str) -> None:
     """Runs from wherever the project currently is, using the seed/target
     length/mock mode recorded in project.json at creation time — nothing
     to re-specify here."""
+    total = len(STAGE_ORDER)
+    progress_bar = st.progress(0.0, text="Starting…")
+    st.caption(
+        "Stages that call real APIs (voice, images) can take anywhere from "
+        "seconds to a few minutes each — this bar only advances when a "
+        "stage *finishes*, so a long pause on one stage is normal, not stuck."
+    )
     with st.status("Running pipeline…", expanded=True) as box:
         for event in orch.iter_run(project_id):
             stage = event.get("stage")
             label = STAGE_LABELS.get(stage, stage or "")
             status = event["status"]
+            idx = STAGE_ORDER.index(stage) if stage in STAGE_ORDER else total
+            duration = event.get("duration_s")
+            duration_str = f" ({duration}s)" if duration is not None else ""
+
             if status == "running":
+                progress_bar.progress(idx / total, text=f"Stage {idx + 1} of {total}: {label}…")
                 box.write(f"🔵 Running **{label}**…")
             elif status == "done":
-                box.write(f"✅ **{label}** complete")
+                progress_bar.progress((idx + 1) / total, text=f"Stage {idx + 1} of {total}: {label} done")
+                box.write(f"✅ **{label}** complete{duration_str}")
             elif status == "skipped":
+                progress_bar.progress((idx + 1) / total, text=f"Stage {idx + 1} of {total}: {label} (already done)")
                 box.write(f"⏭️ {label} already done")
             elif status == "awaiting_approval":
-                box.write(f"⏳ **{label}** complete — waiting for your approval")
+                progress_bar.progress((idx + 1) / total, text=f"Paused after stage {idx + 1} of {total}: {label}")
+                box.write(f"⏳ **{label}** complete{duration_str} — waiting for your approval")
                 box.update(label="Paused for approval", state="complete")
             elif status == "failed":
-                box.write(f"❌ **{label}** failed: {event.get('error')}")
+                box.write(f"❌ **{label}** failed{duration_str}: {event.get('error')}")
                 box.update(label=f"Failed at {label}", state="error")
             elif status == "pipeline_done":
+                progress_bar.progress(1.0, text="Complete")
                 box.write("🎉 All stages complete!")
                 box.update(label="Pipeline complete", state="complete")
     st.rerun()
@@ -187,6 +203,7 @@ def main() -> None:
         f"**Target length:** {meta['target_minutes']} min  ·  "
         f"**Mode:** {'mock (no API calls)' if meta['mock'] else 'live'}"
     )
+    st.caption(f"📂 Output folder: `{project_dir}`")
     render_how_it_works(orch)
 
     states = orch.status(project_id)

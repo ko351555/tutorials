@@ -145,7 +145,7 @@ def render_results(project_dir: Path, mock: bool) -> None:
 
 
 def render_asset_browser(project_dir: Path) -> None:
-    tabs = st.tabs(["Script", "Audio", "Images", "Storyboard"])
+    tabs = st.tabs(["Script", "Audio", "Images", "Storyboard", "Video", "Packaging"])
 
     script_path = project_dir / STAGE_FOLDERS["script_generation"] / "script.md"
     with tabs[0]:
@@ -170,5 +170,25 @@ def render_asset_browser(project_dir: Path) -> None:
         storyboard_path = project_dir / STAGE_FOLDERS["scene_planning"] / "storyboard.json"
         if storyboard_path.exists():
             st.dataframe(read_json(storyboard_path), use_container_width=True, hide_index=True)
+        else:
+            st.caption("Not generated yet.")
+
+    with tabs[4]:
+        branded_cut = project_dir / STAGE_FOLDERS["canva_finishing"] / "branded_cut.mp4"
+        rough_cut = project_dir / STAGE_FOLDERS["video_assembly"] / "rough_cut.mp4"
+        if branded_cut.exists():
+            st.caption(f"`{branded_cut}` (branded)")
+            safe_video(branded_cut, "Branded cut")
+        elif rough_cut.exists():
+            st.caption(f"`{rough_cut}` (rough cut — branding not applied yet)")
+            safe_video(rough_cut, "Rough cut")
+        else:
+            st.caption("Not generated yet.")
+
+    with tabs[5]:
+        packaging_path = project_dir / STAGE_FOLDERS["youtube_packaging"] / "packaging.json"
+        if packaging_path.exists():
+            st.caption(f"`{packaging_path}`")
+            st.json(read_json(packaging_path))
         else:
             st.caption("Not generated yet.")
