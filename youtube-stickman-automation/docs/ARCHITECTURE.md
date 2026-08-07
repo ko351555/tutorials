@@ -364,6 +364,16 @@ reference input) so scene N+1 stays visually continuous with scene N.
 Google Flow and Canva's Magic Media are left as manual, creative-only
 options — neither exposes a scriptable API today.
 
+**No image-gen API key? Set `IMAGE_GEN_PROVIDER=manual`.** This trades
+automation for zero extra cost: an `image_upload` approval gate fires after
+Stage 6 showing every scene's prompt (copy into ChatGPT — already covered
+by a Pro subscription — or any image tool) with an upload slot right next
+to it in the UI. Stage 7 then just verifies the files exist and builds the
+manifest from them instead of calling an API — everything downstream
+(assembly, branding, packaging) is unaffected. CLI users without the UI can
+drop files straight into `07_images/<scene_id>/image.png` and run
+`ystick approve <id> --stage image_upload`.
+
 ### Google Flow — Stage 8 (optional motion enhancement)
 No public API (Google Labs, browser-only, invite/subscription gated). Not on
 the automated critical path. `video_assembly.py`'s default path is 100%
@@ -426,12 +436,14 @@ fallback" runbook note).
 | After Stage 1 (topic) | **On** | Highest-leverage 10-second decision in the whole pipeline — everything downstream is wasted spend if the wrong idea is picked. |
 | After Stage 2 (script) | Off (opt-in) | Turn on while you're still dialing in the style guide; turn off once the style guide reliably produces on-voice scripts. |
 | After Stage 5 (storyboard) | Off (opt-in) | Useful early on to sanity-check pacing/scene count before spending image-gen credits on 40 prompts. |
+| After Stage 6 (`image_upload`) | **Auto — on whenever `IMAGE_GEN_PROVIDER=manual`** | Not a settings.yaml toggle like the others; it's derived from that provider choice, since it's only relevant when there's no image-gen API key to call automatically. |
 | After Stage 9 (final cut) | **On** | Last check before packaging drafts a real YouTube upload — catch any visual/audio glitch before it's "ready to publish." |
 | Community post / thumbnail upload | **Always manual** | No API exists; pipeline hands you drafted copy and files, you paste/upload. |
 | Publish button | **Always manual** | The system never auto-publishes; Stage 10 leaves the video as a private/unlisted draft by design. |
 
-All gates are toggles in `config/settings.yaml` — dial them down as you trust
-the pipeline more, or up while testing a new niche/style.
+All gates except `image_upload` are toggles in `config/settings.yaml` —
+dial them down as you trust the pipeline more, or up while testing a new
+niche/style.
 
 ---
 

@@ -9,6 +9,7 @@ import streamlit as st
 
 from ystick.core.orchestrator import Orchestrator
 from ystick.core.pipeline import STAGE_FOLDERS
+from ystick.stages.stage7_image_generation import find_uploaded_image
 from ystick.ui.helpers import safe_audio, safe_video
 from ystick.utils.files import read_json, write_json
 
@@ -94,6 +95,59 @@ def render_storyboard_review(orch: Orchestrator, project_id: str, project_dir: P
 
     if st.button("✅ Approve & Continue", type="primary"):
         orch.approve(project_id, "storyboard_review", {})
+        st.rerun()
+
+
+def render_image_upload(orch: Orchestrator, project_id: str, project_dir: Path) -> None:
+    """Fires automatically when IMAGE_GEN_PROVIDER=manual — no image-gen API
+    key needed at all. Shows each scene's prompt (copy it into ChatGPT or
+    whatever tool you like) and a slot to upload the result directly."""
+    prompts = read_json(project_dir / STAGE_FOLDERS["image_prompts"] / "image_prompts.json")
+    images_dir = project_dir / STAGE_FOLDERS["image_generation"]
+    needs_upload = [e for e in prompts if "prompt" in e]
+
+    st.subheader("🖼️ Generate images manually, then upload them here")
+    st.caption(
+        "No image-gen API key needed — copy each prompt below into ChatGPT "
+        "(or any image tool), download the result, and upload it in the "
+        "matching slot. Scenes that reuse a previous image are handled "
+        "automatically and don't need an upload."
+    )
+
+    uploaded_count = 0
+    for entry in needs_upload:
+        scene_id = entry["scene_id"]
+        scene_dir = images_dir / scene_id
+        existing = find_uploaded_image(scene_dir)
+        if existing:
+            uploaded_count += 1
+
+        with st.container(border=True):
+            st.markdown(f"**{scene_id}**" + ("  ✅" if existing else ""))
+            st.code(entry["prompt"], language=None)
+            cols = st.columns([1, 2])
+            if existing:
+                cols[0].image(str(existing), width=160)
+            uploaded_file = cols[1].file_uploader(
+                "Upload image", type=["png", "jpg", "jpeg", "webp"], key=f"upload_{scene_id}", label_visibility="collapsed"
+            )
+            # file_uploader keeps returning the same UploadedFile on every
+            # rerun (not just the moment it's selected) — guard on file_id
+            # so we don't rewrite-and-rerun forever for an upload already
+            # processed.
+            processed_key = f"_processed_upload_{scene_id}"
+            if uploaded_file is not None and st.session_state.get(processed_key) != uploaded_file.file_id:
+                scene_dir.mkdir(parents=True, exist_ok=True)
+                ext = Path(uploaded_file.name).suffix or ".png"
+                (scene_dir / f"image{ext}").write_bytes(uploaded_file.getvalue())
+                st.session_state[processed_key] = uploaded_file.file_id
+                st.rerun()
+
+    st.divider()
+    total = len(needs_upload)
+    st.progress(uploaded_count / total if total else 1.0, text=f"{uploaded_count} of {total} images uploaded")
+    if st.button("✅ Approve & Continue", type="primary", disabled=uploaded_count < total):
+        orch.approve(project_id, "image_upload", {})
         st.rerun()
 
 

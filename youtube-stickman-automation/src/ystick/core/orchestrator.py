@@ -30,9 +30,15 @@ GATE_AFTER_STAGE = {
     "topic_selection": "topic_discovery",
     "script_review": "script_generation",
     "storyboard_review": "scene_planning",
+    "image_upload": "image_prompts",
     "final_review": "canva_finishing",
 }
 STAGE_TO_GATE = {v: k for k, v in GATE_AFTER_STAGE.items()}
+
+# image_upload isn't a settings.yaml toggle like the others — it only makes
+# sense when IMAGE_GEN_PROVIDER=manual (no image-gen API key), so whether
+# it fires is derived from that choice rather than a separate setting a
+# user could forget to flip.
 
 
 class StageEvent(TypedDict, total=False):
@@ -198,7 +204,12 @@ class Orchestrator:
                 log.info("stage_complete", stage=stage_name, summary=summary, duration_s=duration_s)
 
             gate = STAGE_TO_GATE.get(stage_name)
-            gate_enabled = gate and self.settings.approvals.get(gate, False)
+            if gate == "image_upload":
+                # Mock mode always mock-generates images regardless of
+                # provider, so there's nothing for the human to upload.
+                gate_enabled = (not ctx.mock) and self.secrets.image_gen_provider == "manual"
+            else:
+                gate_enabled = gate and self.settings.approvals.get(gate, False)
             if gate_enabled and self.store.get_approval(project_id, gate) is None:
                 self.store.set_status(project_id, stage_name, AWAITING_APPROVAL)
                 if log:

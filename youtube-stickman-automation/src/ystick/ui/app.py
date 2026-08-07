@@ -35,6 +35,7 @@ GATE_RENDERERS = {
     "topic_selection": gates.render_topic_selection,
     "script_review": gates.render_script_review,
     "storyboard_review": gates.render_storyboard_review,
+    "image_upload": gates.render_image_upload,
     "final_review": gates.render_final_review,
 }
 
