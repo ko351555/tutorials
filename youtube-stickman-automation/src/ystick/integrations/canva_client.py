@@ -20,9 +20,12 @@ import time
 from pathlib import Path
 
 import requests
+import structlog
 
 from ystick.config import Secrets
 from ystick.core.exceptions import FatalError, RetryableError
+
+log = structlog.get_logger()
 
 AUTOFILL_URL = "https://api.canva.com/rest/v1/autofills"
 EXPORT_URL = "https://api.canva.com/rest/v1/exports"
@@ -32,6 +35,13 @@ class CanvaClient:
     def __init__(self, secrets: Secrets, mock: bool = False):
         self.secrets = secrets
         self.mock = mock
+
+    def _configured(self) -> bool:
+        return bool(
+            self.secrets.canva_brand_template_id
+            and self.secrets.canva_client_id
+            and self.secrets.canva_client_secret
+        )
 
     def _access_token(self) -> str:
         # TODO: implement the OAuth2 (PKCE) exchange/refresh for Canva
@@ -83,6 +93,21 @@ class CanvaClient:
     def apply_branding(self, rough_cut: Path, out_path: Path, fields: dict) -> Path:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         if self.mock:
+            shutil.copyfile(rough_cut, out_path)
+            return out_path
+
+        if not self._configured():
+            # Canva Connect requires a one-time OAuth2/PKCE app setup plus a
+            # hand-built Brand Template — most channels won't have that
+            # wired up yet. Branding is an enhancement (intro/outro), not
+            # the deliverable, so pass the rough cut through unbranded
+            # rather than blocking the whole pipeline on it.
+            log.warning(
+                "branding.canva_not_configured",
+                detail="CANVA_CLIENT_ID/CANVA_CLIENT_SECRET/CANVA_BRAND_TEMPLATE_ID "
+                "not fully set — skipping Canva branding, passing the rough cut "
+                "through unbranded. See .env.example for setup.",
+            )
             shutil.copyfile(rough_cut, out_path)
             return out_path
 
