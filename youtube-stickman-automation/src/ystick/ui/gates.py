@@ -8,7 +8,7 @@ from pathlib import Path
 import streamlit as st
 
 from ystick.core.orchestrator import Orchestrator
-from ystick.core.pipeline import STAGE_FOLDERS, STAGE_LABELS, STAGE_ORDER
+from ystick.core.pipeline import STAGE_DESCRIPTIONS, STAGE_FOLDERS, STAGE_LABELS, STAGE_ORDER
 from ystick.stages.stage7_image_generation import find_uploaded_image
 from ystick.state.models import DONE
 from ystick.ui.helpers import safe_audio, safe_video
@@ -23,12 +23,25 @@ SCORE_LABELS = {
 }
 
 
+def _next_stage_note(after_stage: str) -> str:
+    """'Continuing will start Stage N: <label> — <what it does>', or a
+    completion note if this is the last gate. Shown under every gate's
+    continue button so it's always clear what happens next, not just
+    what's happening now."""
+    idx = STAGE_ORDER.index(after_stage)
+    if idx + 1 < len(STAGE_ORDER):
+        nxt = STAGE_ORDER[idx + 1]
+        return f"➡️ Next: **{STAGE_LABELS[nxt]}** — {STAGE_DESCRIPTIONS[nxt]}"
+    return "➡️ This is the last stage before the pipeline is complete."
+
+
 def render_topic_selection(orch: Orchestrator, project_id: str, project_dir: Path) -> None:
     ideas_path = project_dir / STAGE_FOLDERS["topic_discovery"] / "ideas.json"
     ideas = read_json(ideas_path)
 
     st.subheader("🎯 Stage 1 — Pick a topic")
     st.caption("Ranked by weighted score across viral potential, search demand, competition, watch-time, and monetization.")
+    st.caption(_next_stage_note("topic_discovery"))
 
     for i, idea in enumerate(ideas):
         with st.container(border=True):
@@ -66,6 +79,7 @@ def render_script_review(orch: Orchestrator, project_id: str, project_dir: Path)
             _save_script(script_dir, edited)
         orch.approve(project_id, "script_review", {})
         st.rerun()
+    st.caption(_next_stage_note("script_generation"))
 
 
 def _save_script(script_dir: Path, text: str) -> None:
@@ -97,6 +111,7 @@ def render_storyboard_review(orch: Orchestrator, project_id: str, project_dir: P
     if st.button("✅ Approve & Continue", type="primary"):
         orch.approve(project_id, "storyboard_review", {})
         st.rerun()
+    st.caption(_next_stage_note("scene_planning"))
 
 
 def render_image_upload(orch: Orchestrator, project_id: str, project_dir: Path) -> None:
@@ -116,7 +131,7 @@ def render_image_upload(orch: Orchestrator, project_id: str, project_dir: Path) 
     )
 
     uploaded_count = 0
-    for entry in needs_upload:
+    for step, entry in enumerate(needs_upload, start=1):
         scene_id = entry["scene_id"]
         scene_dir = images_dir / scene_id
         existing = find_uploaded_image(scene_dir)
@@ -124,13 +139,19 @@ def render_image_upload(orch: Orchestrator, project_id: str, project_dir: Path) 
             uploaded_count += 1
 
         with st.container(border=True):
-            st.markdown(f"**{scene_id}**" + ("  ✅" if existing else ""))
+            st.markdown(f"**Step {step} of {len(needs_upload)} — {scene_id}**")
             st.code(entry["prompt"], language=None)
             cols = st.columns([1, 2])
-            if existing:
-                cols[0].image(str(existing), width=160)
+            with cols[0]:
+                if existing:
+                    st.image(str(existing), width=160)
+                    st.success(f"Uploaded: {existing.name}")
+                else:
+                    st.info("Waiting for upload")
             uploaded_file = cols[1].file_uploader(
-                "Upload image", type=["png", "jpg", "jpeg", "webp"], key=f"upload_{scene_id}", label_visibility="collapsed"
+                "Upload image" if not existing else "Replace image",
+                type=["png", "jpg", "jpeg", "webp"],
+                key=f"upload_{scene_id}",
             )
             # file_uploader keeps returning the same UploadedFile on every
             # rerun (not just the moment it's selected) — guard on file_id
@@ -150,6 +171,10 @@ def render_image_upload(orch: Orchestrator, project_id: str, project_dir: Path) 
     if st.button("✅ Approve & Continue", type="primary", disabled=uploaded_count < total):
         orch.approve(project_id, "image_upload", {})
         st.rerun()
+    if uploaded_count < total:
+        st.caption(f"Upload the remaining {total - uploaded_count} image(s) to continue.")
+    else:
+        st.caption(_next_stage_note("image_prompts"))
 
 
 def render_final_review(orch: Orchestrator, project_id: str, project_dir: Path) -> None:
@@ -162,6 +187,7 @@ def render_final_review(orch: Orchestrator, project_id: str, project_dir: Path) 
     if st.button("✅ Approve & Continue", type="primary"):
         orch.approve(project_id, "final_review", {})
         st.rerun()
+    st.caption(_next_stage_note("canva_finishing"))
 
 
 # --- per-stage result previews -------------------------------------------
@@ -315,6 +341,7 @@ def render_stage_results(project_dir: Path, status_by_stage: dict) -> None:
     gate screen above already shows the full interactive detail."""
     completed = [s for s in STAGE_ORDER if status_by_stage[s].status == DONE]
     if not completed:
+        st.info("Nothing completed yet — results will appear here as soon as the first stage finishes. Check the **Pipeline** tab to start or continue the run.")
         return
     st.subheader("📋 Results so far")
     for stage_name in completed:

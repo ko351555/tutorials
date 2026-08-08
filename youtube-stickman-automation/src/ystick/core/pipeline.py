@@ -81,3 +81,19 @@ STAGE_LABELS: dict[str, str] = {
     "canva_finishing": "Branding",
     "youtube_packaging": "Packaging",
 }
+
+# One-line "what happens here" for each stage — shown as a reference legend
+# in the UI so it's clear what to expect before you get there, not just
+# once you're already at that stage's gate.
+STAGE_DESCRIPTIONS: dict[str, str] = {
+    "topic_discovery": "Generates and scores video ideas from your seed (or the channel's topics if left blank).",
+    "script_generation": "Writes the full narration script for the idea you picked, in your channel's voice.",
+    "voice_generation": "Sends the script to ElevenLabs and gets back narration audio.",
+    "timestamps": "Transcribes the narration to get word- and sentence-level timestamps.",
+    "scene_planning": "Splits the narration into scenes based on pacing, deciding where images change.",
+    "image_prompts": "Writes one image-generation prompt per scene, keeping style/character consistent.",
+    "image_generation": "Turns each prompt into an image — via API, or your manual upload if configured.",
+    "video_assembly": "Assembles the images, narration, subtitles, and pan/zoom into a rough-cut video.",
+    "canva_finishing": "Applies branding (intro/outro) via Canva to produce the finished cut.",
+    "youtube_packaging": "Drafts title, description, tags, chapters, thumbnail concept, and social copy.",
+}

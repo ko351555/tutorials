@@ -10,7 +10,7 @@ from __future__ import annotations
 import streamlit as st
 
 from ystick.core.orchestrator import GATE_AFTER_STAGE, STAGE_TO_GATE, Orchestrator
-from ystick.core.pipeline import STAGE_LABELS, STAGE_ORDER
+from ystick.core.pipeline import STAGE_DESCRIPTIONS, STAGE_LABELS, STAGE_ORDER
 from ystick.state.models import AWAITING_APPROVAL, DONE, FAILED
 from ystick.ui import gates
 from ystick.ui.helpers import tail_log
@@ -101,17 +101,15 @@ def find_blocking_condition(orch: Orchestrator, project_id: str, status_by_stage
 
 def render_how_it_works(orch: Orchestrator) -> None:
     bp = orch.blueprint
-    with st.expander("ℹ️ How this pipeline starts and ends", expanded=False):
+    with st.expander("ℹ️ How this pipeline starts and ends — and what to expect at each stage", expanded=False):
         st.markdown(
             f"""
 **Start:** you give it a specific video idea, or leave it blank and it
 picks from **{bp.name}**'s topics ({', '.join(bp.topics)}), scored for
 viral/search/competition/watch-time/monetization potential.
 
-**Then it runs through 10 automated stages** — script → voice → timestamps
-→ storyboard → image prompts → images → video assembly → branding →
-YouTube packaging — pausing only at the approval gates you've enabled
-(shown ⏳ in the tracker above).
+**Then it runs through 10 automated stages**, pausing only at the approval
+gates you've enabled (shown ⏳ in the tracker):
 
 **End:** a fully packaged, branded video sitting as a **private** YouTube
 draft with title/description/tags/chapters/thumbnail concept ready — you
@@ -122,6 +120,11 @@ Target narration length defaults to **{bp.target_video_length_minutes} min**
 see the caption under the project title once a project is selected.
             """
         )
+        rows = [
+            {"#": i + 1, "Stage": STAGE_LABELS[s], "What happens": STAGE_DESCRIPTIONS[s]}
+            for i, s in enumerate(STAGE_ORDER)
+        ]
+        st.dataframe(rows, use_container_width=True, hide_index=True)
 
 
 def sidebar(orch: Orchestrator) -> str | None:
@@ -158,9 +161,16 @@ def sidebar(orch: Orchestrator) -> str | None:
         st.sidebar.info("No projects yet — create one above.")
         return None
 
-    current = st.session_state.get("current_project")
+    # URL query param (?project=<id>) makes the current project bookmarkable
+    # and shareable, and survives a plain page refresh — session_state alone
+    # doesn't. session_state wins when both are present (e.g. right after
+    # creating a project, before the query param below has been written).
+    current = st.session_state.get("current_project") or st.query_params.get("project")
     default_idx = projects.index(current) if current in projects else 0
-    return st.sidebar.radio("Select a project", projects, index=default_idx, label_visibility="collapsed")
+    selected = st.sidebar.radio("Select a project", projects, index=default_idx, label_visibility="collapsed")
+    if st.query_params.get("project") != selected:
+        st.query_params["project"] = selected
+    return selected
 
 
 def advanced_panel(orch: Orchestrator, project_id: str) -> None:
@@ -197,30 +207,34 @@ def main() -> None:
 
     states = orch.status(project_id)
     status_by_stage = {s.stage: s for s in states}
-    render_stage_tracker(status_by_stage)
-    st.divider()
 
-    kind, detail = find_blocking_condition(orch, project_id, status_by_stage)
+    tab_pipeline, tab_results = st.tabs(["🚀 Pipeline", "📋 Results"])
 
-    if kind == "failed":
-        stage_name = detail
-        s = status_by_stage[stage_name]
-        st.error(
-            f"Stage **{STAGE_LABELS[stage_name]}** failed (attempt {s.attempts}):\n\n```\n{s.last_error}\n```"
-        )
-        if st.button("🔁 Retry", type="primary"):
-            run_with_progress(orch, project_id)
-    elif kind == "awaiting_approval":
-        GATE_RENDERERS[detail](orch, project_id, project_dir)
-    elif all(s.status == DONE for s in states):
-        st.success("Pipeline complete!")
-    else:
-        st.info("Ready to run." + (" (mock mode)" if meta["mock"] else ""))
-        if st.button("▶️ Run pipeline", type="primary"):
-            run_with_progress(orch, project_id)
+    with tab_pipeline:
+        render_stage_tracker(status_by_stage)
+        st.divider()
 
-    st.divider()
-    gates.render_stage_results(project_dir, status_by_stage)
+        kind, detail = find_blocking_condition(orch, project_id, status_by_stage)
+
+        if kind == "failed":
+            stage_name = detail
+            s = status_by_stage[stage_name]
+            st.error(
+                f"Stage **{STAGE_LABELS[stage_name]}** failed (attempt {s.attempts}):\n\n```\n{s.last_error}\n```"
+            )
+            if st.button("🔁 Retry", type="primary"):
+                run_with_progress(orch, project_id)
+        elif kind == "awaiting_approval":
+            GATE_RENDERERS[detail](orch, project_id, project_dir)
+        elif all(s.status == DONE for s in states):
+            st.success("Pipeline complete! Check the **Results** tab for everything it produced.")
+        else:
+            st.info("Ready to run." + (" (mock mode)" if meta["mock"] else ""))
+            if st.button("▶️ Run pipeline", type="primary"):
+                run_with_progress(orch, project_id)
+
+    with tab_results:
+        gates.render_stage_results(project_dir, status_by_stage)
 
     with st.expander("🪵 Logs"):
         st.code(tail_log(project_id), language="json")
