@@ -49,10 +49,10 @@ class YoutubePackagingStage(Stage):
 
         upload_result = {"status": "skipped"}
         if cfg.upload_as:
-            branded_cut = ctx.project_dir / STAGE_FOLDERS["canva_finishing"] / "branded_cut.mp4"
+            final_cut = ctx.project_dir / STAGE_FOLDERS["caption_burn_in"] / "final_cut.mp4"
             client = YouTubeClient(ctx.secrets, mock=ctx.mock)
             upload_result = client.create_draft(
-                branded_cut,
+                final_cut,
                 {"title": packaging["title"], "description": packaging["description"], "tags": packaging["tags"]},
                 privacy=cfg.upload_as,
             )

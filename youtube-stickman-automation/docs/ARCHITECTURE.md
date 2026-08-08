@@ -39,7 +39,8 @@ crash.
      ┌────────────────────────────────────────────────────────────────┐
      │                     data/projects/<project_id>/                │
      │  01_ideas/ 02_script/ 03_audio/ 04_transcript/ 05_storyboard/   │
-     │  06_prompts/ 07_images/ 08_assembly/ 09_final/ 10_packaging/    │
+     │  06_prompts/ 07_images/ 08_assembly/ 09_final/ 09b_captions/    │
+     │  10_packaging/                                                 │
      └────────────────────────────────────────────────────────────────┘
                                           ▲
                                           │ each stage is isolated, idempotent,
@@ -59,6 +60,15 @@ crash.
           └──────────────────────── HUMAN APPROVAL GATES (optional, configurable) ─────────────────────────────┘
                  gate: topic          gate: script        gate: storyboard       gate: final cut/packaging
 ```
+
+A stage sits between Stage 9 (Canva) and Stage 10 (YouTube) not shown in the
+table above for column width: **Stage 9b — Caption Burn-In**
+(`stage9b_caption_burn_in.py`, folder `09b_captions/`). It burns the
+narration's SRT (written by Stage 8, reused here) into the branded cut so
+the `final_review` gate — and Stage 10's upload — see the actual finished
+video, captions included. Same FFmpeg backbone as Stage 8; if the local
+ffmpeg build has no libass (`subtitles` filter missing), it passes the
+branded cut through uncaptioned instead of failing the stage — see §6.
 
 Design principles:
 
@@ -221,6 +231,7 @@ youtube-stickman-automation/
 │   │   ├── stage7_image_generation.py
 │   │   ├── stage8_video_assembly.py
 │   │   ├── stage9_canva_finishing.py
+│   │   ├── stage9b_caption_burn_in.py
 │   │   └── stage10_youtube_packaging.py
 │   ├── ui/                          # Streamlit dashboard — see §11
 │   │   ├── app.py                   # entrypoint: sidebar, stage tracker, run control
@@ -240,8 +251,9 @@ youtube-stickman-automation/
 │       ├── 05_storyboard/storyboard.json
 │       ├── 06_prompts/image_prompts.json
 │       ├── 07_images/scene_001/*.png ... scene_NNN/*.png
-│       ├── 08_assembly/rough_cut.mp4
+│       ├── 08_assembly/rough_cut.mp4, narration.srt
 │       ├── 09_final/branded_cut.mp4
+│       ├── 09b_captions/final_cut.mp4
 │       ├── 10_packaging/packaging.json
 │       └── run_state.json           # human-readable mirror of the SQLite row
 ├── logs/<project_id>.log
@@ -299,7 +311,7 @@ approvals:
   topic_selection: true      # Stage 1 → 2
   script_review: false       # Stage 2 → 3 (edit script.md by hand if enabled)
   storyboard_review: false   # Stage 5 → 6
-  final_review: true         # Stage 9 → 10, before packaging drafts the upload
+  final_review: true         # Stage 9b → 10, before packaging drafts the upload
 ```
 
 When a gate is on, the orchestrator writes the stage's output, sets
@@ -385,24 +397,38 @@ drop files straight into `07_images/<scene_id>/image.png` and run
 ### Google Flow — Stage 8 (optional motion enhancement)
 No public API (Google Labs, browser-only, invite/subscription gated). Not on
 the automated critical path. `video_assembly.py`'s default path is 100%
-FFmpeg: Ken Burns pan/zoom on each still, crossfade transitions, subtitle
-burn-in from the Stage 4 transcript, narration mux. Flow is documented as an
-optional manual step: a human can take 2-4 "hero" scene images into Flow,
-generate a short motion clip, and drop the resulting file into
-`08_assembly/hero_clips/` — `video_assembly.py` detects and splices in any
-file present there before the automated pass, so the manual step augments
-rather than blocks the pipeline.
+FFmpeg: Ken Burns pan/zoom on each still, crossfade transitions, narration
+mux (subtitle burn-in happens later, in Stage 9b, once the video is at its
+final branded shape). Flow is documented as an optional manual step: a
+human can take 2-4 "hero" scene images into Flow, generate a short motion
+clip, and drop the resulting file into `08_assembly/hero_clips/` —
+`video_assembly.py` detects and splices in any file present there before
+the automated pass, so the manual step augments rather than blocks the
+pipeline.
 
 ### Canva — Stage 9 (branding/finishing)
 Canva Connect APIs are real and documented: **Autofill API** populates a
 pre-built Brand Template's named fields (intro text, outro card, lower
 thirds, logo placeholder) and the **Export API** renders the result. This
 requires a one-time manual step: build the branded template once in Canva's
-editor with named placeholder fields, then reference its `template_id` in
-`config/settings.yaml`. `canva_client.py` implements the API path as
-default and a Playwright fallback (open the template, autofill via UI,
-trigger export, download) behind the same interface for anything the
-Autofill API can't reach (e.g. certain animation presets).
+editor with named placeholder fields, reference its `template_id` in `.env`
+as `CANVA_BRAND_TEMPLATE_ID`, and register a Canva Connect app for
+`CANVA_CLIENT_ID`/`CANVA_CLIENT_SECRET` — Canva Connect's OAuth2/PKCE
+exchange is still a documented stub in `canva_client.py._access_token()`,
+left for whoever wires up a redirect-capable deployment. Until all three are
+set, `apply_branding()` passes the rough cut through unbranded rather than
+failing Stage 9 — branding is an enhancement on an already-complete video,
+not the deliverable itself.
+
+### Stage 9b — Caption burn-in
+Runs after branding, not as part of Stage 8, so captions land on the actual
+final cut (once real Canva branding is wired up, that means intro/outro
+included) rather than only the pre-branding rough cut. Reuses the SRT Stage
+8 already writes to `08_assembly/narration.srt`. Same FFmpeg `subtitles`
+filter as before; if the local ffmpeg build lacks `libass` (filter not
+compiled in — confirmed to happen on some Homebrew installs), it logs a
+warning and passes the video through uncaptioned instead of failing the
+stage.
 
 ### YouTube — Stage 10 (packaging + optional upload)
 YouTube Data API v3 (official, key/OAuth-based) creates the video as a
@@ -410,7 +436,11 @@ YouTube Data API v3 (official, key/OAuth-based) creates the video as a
 description timestamps), and thumbnail already set — nothing goes public
 without a human clicking Publish. Community posts have no public API and
 are flagged in `packaging.json` as a manual step with the drafted copy ready
-to paste in.
+to paste in. Like Canva, the upload needs a one-time OAuth app registration
+plus a consent flow to mint `YOUTUBE_OAUTH_REFRESH_TOKEN` — until all three
+`YOUTUBE_OAUTH_*` values are set, `create_draft()` skips the upload
+(`status: skipped_not_configured`) rather than failing Stage 10; the
+drafted metadata itself is written regardless.
 
 ---
 
@@ -445,7 +475,7 @@ fallback" runbook note).
 | After Stage 2 (script) | Off (opt-in) | Turn on while you're still dialing in the style guide; turn off once the style guide reliably produces on-voice scripts. |
 | After Stage 5 (storyboard) | Off (opt-in) | Useful early on to sanity-check pacing/scene count before spending image-gen credits on 40 prompts. |
 | After Stage 6 (`image_upload`) | **Auto — on whenever `IMAGE_GEN_PROVIDER=manual`** | Not a settings.yaml toggle like the others; it's derived from that provider choice, since it's only relevant when there's no image-gen API key to call automatically. |
-| After Stage 9 (final cut) | **On** | Last check before packaging drafts a real YouTube upload — catch any visual/audio glitch before it's "ready to publish." |
+| After Stage 9b (final cut, branded + captioned) | **On** | Last check before packaging drafts a real YouTube upload — catch any visual/audio glitch before it's "ready to publish." |
 | Community post / thumbnail upload | **Always manual** | No API exists; pipeline hands you drafted copy and files, you paste/upload. |
 | Publish button | **Always manual** | The system never auto-publishes; Stage 10 leaves the video as a private/unlisted draft by design. |
 

@@ -207,16 +207,16 @@ def render_image_upload_recovery(project_dir: Path) -> None:
 
 
 def render_final_review(orch: Orchestrator, project_id: str, project_dir: Path) -> None:
-    branded_cut = project_dir / STAGE_FOLDERS["canva_finishing"] / "branded_cut.mp4"
+    final_cut = project_dir / STAGE_FOLDERS["caption_burn_in"] / "final_cut.mp4"
 
-    st.subheader("🎞️ Stage 9 — Final review before packaging")
+    st.subheader("🎞️ Final review before packaging")
     st.caption("Last check before Stage 10 drafts YouTube title/description/tags and (optionally) uploads a private draft.")
-    safe_video(branded_cut, "Branded cut")
+    safe_video(final_cut, "Final cut (branded + captioned)")
 
     if st.button("✅ Approve & Continue", type="primary"):
         orch.approve(project_id, "final_review", {})
         st.rerun()
-    st.caption(_next_stage_note("canva_finishing"))
+    st.caption(_next_stage_note("caption_burn_in"))
 
 
 # --- per-stage result previews -------------------------------------------
@@ -318,6 +318,12 @@ def _preview_canva_finishing(project_dir: Path) -> None:
     safe_video(path, "Branded cut")
 
 
+def _preview_caption_burn_in(project_dir: Path) -> None:
+    path = project_dir / STAGE_FOLDERS["caption_burn_in"] / "final_cut.mp4"
+    st.caption(f"`{path}`")
+    safe_video(path, "Final cut (branded + captioned)")
+
+
 def _preview_youtube_packaging(project_dir: Path) -> None:
     path = project_dir / STAGE_FOLDERS["youtube_packaging"] / "packaging.json"
     if not path.exists():
@@ -360,6 +366,7 @@ STAGE_PREVIEWS = {
     "image_generation": _preview_image_generation,
     "video_assembly": _preview_video_assembly,
     "canva_finishing": _preview_canva_finishing,
+    "caption_burn_in": _preview_caption_burn_in,
     "youtube_packaging": _preview_youtube_packaging,
 }
 

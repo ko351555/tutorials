@@ -40,7 +40,7 @@ stages:
     fps: 30
     resolution: "1920x1080"
     ken_burns: true
-    subtitles: true
+    subtitles: false  # captions are burned in after branding — see stages.caption_burn_in
     hero_clips_dir: "08_assembly/hero_clips"
   canva_finishing:
     template_id: "${CANVA_BRAND_TEMPLATE_ID}"

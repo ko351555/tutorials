@@ -31,7 +31,7 @@ GATE_AFTER_STAGE = {
     "script_review": "script_generation",
     "storyboard_review": "scene_planning",
     "image_upload": "image_prompts",
-    "final_review": "canva_finishing",
+    "final_review": "caption_burn_in",
 }
 STAGE_TO_GATE = {v: k for k, v in GATE_AFTER_STAGE.items()}
 
@@ -61,6 +61,7 @@ def _build_stage_registry():
     from ystick.stages.stage7_image_generation import ImageGenerationStage
     from ystick.stages.stage8_video_assembly import VideoAssemblyStage
     from ystick.stages.stage9_canva_finishing import CanvaFinishingStage
+    from ystick.stages.stage9b_caption_burn_in import CaptionBurnInStage
     from ystick.stages.stage10_youtube_packaging import YoutubePackagingStage
 
     stages = [
@@ -73,6 +74,7 @@ def _build_stage_registry():
         ImageGenerationStage(),
         VideoAssemblyStage(),
         CanvaFinishingStage(),
+        CaptionBurnInStage(),
         YoutubePackagingStage(),
     ]
     return {s.name: s for s in stages}

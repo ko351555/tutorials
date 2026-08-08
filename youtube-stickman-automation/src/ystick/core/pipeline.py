@@ -50,6 +50,7 @@ STAGE_ORDER: list[str] = [
     "image_generation",
     "video_assembly",
     "canva_finishing",
+    "caption_burn_in",
     "youtube_packaging",
 ]
 
@@ -64,6 +65,7 @@ STAGE_FOLDERS: dict[str, str] = {
     "image_generation": "07_images",
     "video_assembly": "08_assembly",
     "canva_finishing": "09_final",
+    "caption_burn_in": "09b_captions",
     "youtube_packaging": "10_packaging",
 }
 
@@ -79,6 +81,7 @@ STAGE_LABELS: dict[str, str] = {
     "image_generation": "Images",
     "video_assembly": "Assembly",
     "canva_finishing": "Branding",
+    "caption_burn_in": "Captions",
     "youtube_packaging": "Packaging",
 }
 
@@ -93,7 +96,8 @@ STAGE_DESCRIPTIONS: dict[str, str] = {
     "scene_planning": "Splits the narration into scenes based on pacing, deciding where images change.",
     "image_prompts": "Writes one image-generation prompt per scene, keeping style/character consistent.",
     "image_generation": "Turns each prompt into an image — via API, or your manual upload if configured.",
-    "video_assembly": "Assembles the images, narration, subtitles, and pan/zoom into a rough-cut video.",
+    "video_assembly": "Assembles the images, narration, and pan/zoom into a rough-cut video.",
     "canva_finishing": "Applies branding (intro/outro) via Canva to produce the finished cut.",
+    "caption_burn_in": "Burns the narration captions into the branded cut, producing the final video.",
     "youtube_packaging": "Drafts title, description, tags, chapters, thumbnail concept, and social copy.",
 }
