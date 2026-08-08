@@ -12,6 +12,14 @@ _QUOTA_MARKERS = (
     "no credits remaining",
 )
 
+# Deliberately NOT matching Gemini's "RESOURCE_EXHAUSTED" / "Quota exceeded"
+# wording here — on Gemini that status covers both permanent (daily quota
+# gone) and transient (per-minute rate limit) cases with near-identical
+# text, and misclassifying a transient one as fatal would stop a retry that
+# was about to succeed. Gemini 429s fall through to the normal retry path
+# below; a truly exhausted quota still ends in "failed" either way, just
+# after the backoff window instead of immediately.
+
 
 def is_quota_exhausted(status_code: int, body_text: str) -> bool:
     if status_code != 429:

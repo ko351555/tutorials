@@ -1,12 +1,21 @@
 """Stage 7: turn each scene's prompt into an image, holding style/character
 consistency via a reference image passed on every call.
 
-Google Flow and Canva's Magic Media are UI-only today (see
-docs/ARCHITECTURE.md §6) so they aren't wired in here — this client targets
-any reference-image-capable generation API (default: OpenAI Images API).
-Swap the `provider` in .env if you use a different consistency-oriented
-model; the interface (`generate(prompt, reference_image, out_path)`) stays
-the same.
+Two API providers (plus "manual", handled entirely in
+stages/stage7_image_generation.py, which never touches this client):
+- openai (default): OpenAI Images API. Needs its own billing, separate
+  from a ChatGPT Pro chat subscription.
+- gemini: Google's Gemini API (get a free key at aistudio.google.com —
+  genuinely free-tier, no billing setup required to start). Gemini's
+  multimodal `generateContent` endpoint doubles as an image generator when
+  given an image-capable model, and accepts a reference image as another
+  input part for the same consistency-locking purpose as OpenAI's edits
+  endpoint.
+
+Google Flow and Canva's Magic Media are UI-only (see docs/ARCHITECTURE.md
+§6) so they aren't wired in here at all — Flow is built on the same
+Imagen family of models Gemini exposes via API, which is the point of the
+gemini provider.
 """
 from __future__ import annotations
 
@@ -21,6 +30,13 @@ from ystick.utils.http_errors import is_quota_exhausted
 
 OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations"
 OPENAI_IMAGE_EDITS_URL = "https://api.openai.com/v1/images/edits"
+
+# Google renames/replaces these periodically — check
+# https://ai.google.dev/gemini-api/docs/image-generation if this 404s.
+GEMINI_IMAGE_MODEL = "gemini-2.0-flash-exp-image-generation"
+GEMINI_GENERATE_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_IMAGE_MODEL}:generateContent"
+
+_MIME_BY_SUFFIX = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 
 # 1x1 transparent PNG — used only as a mock placeholder so mock-mode output
 # is a byte-valid (if meaningless) image file rather than garbage bytes.
@@ -40,6 +56,13 @@ class ImageGenClient:
             out_path.write_bytes(_MOCK_PNG_BYTES)
             return out_path
 
+        if self.secrets.image_gen_provider == "gemini":
+            return self._generate_gemini(prompt, out_path, reference_image)
+        return self._generate_openai(prompt, out_path, reference_image)
+
+    # -- OpenAI --------------------------------------------------------------
+
+    def _generate_openai(self, prompt: str, out_path: Path, reference_image: Path | None) -> Path:
         if not self.secrets.image_gen_api_key:
             raise FatalError("IMAGE_GEN_API_KEY not set")
 
@@ -79,3 +102,48 @@ class ImageGenClient:
         b64 = resp.json()["data"][0]["b64_json"]
         out_path.write_bytes(base64.b64decode(b64))
         return out_path
+
+    # -- Gemini ----------------------------------------------------------------
+
+    def _generate_gemini(self, prompt: str, out_path: Path, reference_image: Path | None) -> Path:
+        if not self.secrets.gemini_api_key:
+            raise FatalError("GEMINI_API_KEY not set — get a free key at aistudio.google.com")
+
+        parts: list[dict] = [{"text": prompt}]
+        if reference_image and reference_image.exists():
+            mime_type = _MIME_BY_SUFFIX.get(reference_image.suffix.lower(), "image/png")
+            b64_ref = base64.b64encode(reference_image.read_bytes()).decode("ascii")
+            parts.append({"inlineData": {"mimeType": mime_type, "data": b64_ref}})
+
+        body = {
+            "contents": [{"parts": parts}],
+            "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
+        }
+        try:
+            resp = requests.post(
+                GEMINI_GENERATE_URL,
+                params={"key": self.secrets.gemini_api_key},
+                json=body,
+                timeout=180,
+            )
+        except requests.RequestException as exc:
+            raise RetryableError(f"Gemini request failed: {exc}") from exc
+
+        if resp.status_code >= 500 or resp.status_code == 429:
+            raise RetryableError(f"Gemini {resp.status_code}: {resp.text[:500]}")
+        if resp.status_code >= 400:
+            raise FatalError(f"Gemini {resp.status_code}: {resp.text[:500]}")
+
+        data = resp.json()
+        try:
+            response_parts = data["candidates"][0]["content"]["parts"]
+        except (KeyError, IndexError) as exc:
+            raise FatalError(f"Gemini response had no candidates: {str(data)[:500]}") from exc
+
+        for part in response_parts:
+            inline = part.get("inlineData")
+            if inline and inline.get("data"):
+                out_path.write_bytes(base64.b64decode(inline["data"]))
+                return out_path
+
+        raise FatalError(f"Gemini response contained no image data: {str(data)[:500]}")

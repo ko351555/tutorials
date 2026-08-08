@@ -67,8 +67,10 @@ class Secrets(BaseSettings):
     transcription_provider: str = "whisper_local"
     fozi_scribe_api_key: str = ""
 
+    # image_gen_provider: openai | gemini | manual — see .env.example
     image_gen_provider: str = "openai"
     image_gen_api_key: str = ""
+    gemini_api_key: str = ""
 
     canva_client_id: str = ""
     canva_client_secret: str = ""

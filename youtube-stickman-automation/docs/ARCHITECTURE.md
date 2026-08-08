@@ -357,13 +357,20 @@ a one-line config change either direction with no stage code changes.
 
 ### Image generation — Stages 6-7
 Needs consistent character/style across dozens of scenes — the actual hard
-requirement. Recommended: an API that supports reference-image conditioning
-(OpenAI Images API with a reference image, or a dedicated consistent-character
-model). `image_gen_client.py` keeps a **running "style memory"** (the
+requirement. `image_gen_client.py` keeps a **running "style memory"** (the
 character sheet from `visual_blueprint.md` + the previous scene's image as a
-reference input) so scene N+1 stays visually continuous with scene N.
-Google Flow and Canva's Magic Media are left as manual, creative-only
-options — neither exposes a scriptable API today.
+reference input) so scene N+1 stays visually continuous with scene N. Two
+API providers are wired in:
+- **`IMAGE_GEN_PROVIDER=openai`** (default) — OpenAI Images API. Needs its
+  own billing, separate from a ChatGPT Pro chat subscription.
+- **`IMAGE_GEN_PROVIDER=gemini`** — Google's Gemini API, genuinely
+  free-tier to start (key from aistudio.google.com, no billing setup
+  required). This is the same Imagen model family behind Google Flow —
+  Flow itself is browser-only with no API, but the model powering it is
+  reachable this way instead.
+
+Google Flow and Canva's Magic Media stay UI-only, creative-only options —
+neither exposes a scriptable API for image generation today.
 
 **No image-gen API key? Set `IMAGE_GEN_PROVIDER=manual`.** This trades
 automation for zero extra cost: an `image_upload` approval gate fires after
