@@ -48,6 +48,7 @@ def test_build_video_subtitles_filter_uses_named_quoted_filename(tmp_path: Path,
     near ..."). The fix names the option and single-quotes the value; this
     locks that exact -vf shape in place."""
     monkeypatch.setattr(va_module, "_ffmpeg_available", lambda: True)
+    monkeypatch.setattr(va_module, "_subtitles_filter_available", lambda: True)
 
     captured_cmds = []
 
@@ -72,6 +73,39 @@ def test_build_video_subtitles_filter_uses_named_quoted_filename(tmp_path: Path,
     vf_index = final_cmd.index("-vf")
     vf_value = final_cmd[vf_index + 1]
     assert vf_value == f"subtitles=filename='{srt_path}'"
+
+
+def test_build_video_skips_subtitles_when_filter_unavailable(tmp_path: Path, monkeypatch):
+    """Regression test for a real production failure: a Homebrew ffmpeg
+    build without libass compiled in raises "No such filter: 'subtitles'"
+    for ANY -vf value naming that filter, no matter how it's escaped.
+    Assembly should degrade to a video without burned-in captions instead
+    of failing the whole stage."""
+    monkeypatch.setattr(va_module, "_ffmpeg_available", lambda: True)
+    monkeypatch.setattr(va_module, "_subtitles_filter_available", lambda: False)
+
+    captured_cmds = []
+
+    def fake_run_ffmpeg(cmd):
+        captured_cmds.append(cmd)
+        Path(cmd[-1]).parent.mkdir(parents=True, exist_ok=True)
+        Path(cmd[-1]).write_bytes(b"fake")
+
+    monkeypatch.setattr(va_module, "run_ffmpeg", fake_run_ffmpeg)
+
+    scenes = [{"scene_id": "scene_001", "image_path": tmp_path / "img.png", "duration_ms": 1000}]
+    narration = tmp_path / "narration.mp3"
+    narration.write_bytes(b"fake")
+    srt_path = tmp_path / "narration.srt"
+    srt_path.write_text("1\n00:00:00,000 --> 00:00:01,000\nhello\n")
+    out_path = tmp_path / "out" / "final.mp4"
+
+    result = va_module.build_video(scenes, narration, srt_path, out_path, mock=False)
+
+    assert result == out_path
+    final_cmd = captured_cmds[-1]
+    assert "-vf" not in final_cmd
+    assert "subtitles" not in " ".join(final_cmd)
 
 
 def test_build_video_falls_back_to_mock_placeholder_without_ffmpeg(tmp_path: Path, monkeypatch):

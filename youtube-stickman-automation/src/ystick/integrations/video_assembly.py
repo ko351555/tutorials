@@ -9,11 +9,31 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import structlog
+
 from ystick.core.exceptions import FatalError
+
+log = structlog.get_logger()
 
 
 def _ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None
+
+
+def _subtitles_filter_available() -> bool:
+    """Some ffmpeg builds (notably a handful of Homebrew installs observed
+    in the wild) ship without libass, so the `subtitles` filter isn't
+    compiled in at all — ffmpeg then fails with "No such filter:
+    'subtitles'" no matter how the argument is written. Check up front so
+    Assembly can degrade to a silent-of-captions video instead of failing
+    the whole stage over what's an enhancement, not the deliverable."""
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-filters"], capture_output=True, check=True
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return False
+    return b" subtitles " in result.stdout
 
 
 def run_ffmpeg(cmd: list[str]) -> None:
@@ -116,19 +136,27 @@ def build_video(
 
     vf_final = None
     if subtitles and srt_path.exists():
-        # ffmpeg's filter-option parser splits the value on ':' to look for
-        # further key=value pairs; a bare path with no colons never trips
-        # that split, so the positional/shorthand mapping to `filename`
-        # doesn't kick in either and the whole thing is rejected with
-        # "No option name near ...". Naming the option explicitly and
-        # single-quoting the value sidesteps that as well as the classic
-        # Windows-drive-letter colon issue (C:\...) in one move; a literal
-        # single quote or backslash inside the path is escaped so the
-        # quoting itself can't be broken out of.
-        escaped_srt = (
-            str(srt_path).replace("\\", "\\\\").replace(":", "\\:").replace("'", "'\\''")
-        )
-        vf_final = f"subtitles=filename='{escaped_srt}'"
+        if not _subtitles_filter_available():
+            log.warning(
+                "assembly.subtitles_filter_unavailable",
+                detail="ffmpeg build has no libass/subtitles filter — burning in "
+                "captions skipped; reinstall ffmpeg with libass support to enable it "
+                "(e.g. `brew reinstall ffmpeg`)",
+            )
+        else:
+            # ffmpeg's filter-option parser splits the value on ':' to look for
+            # further key=value pairs; a bare path with no colons never trips
+            # that split, so the positional/shorthand mapping to `filename`
+            # doesn't kick in either and the whole thing is rejected with
+            # "No option name near ...". Naming the option explicitly and
+            # single-quoting the value sidesteps that as well as the classic
+            # Windows-drive-letter colon issue (C:\...) in one move; a literal
+            # single quote or backslash inside the path is escaped so the
+            # quoting itself can't be broken out of.
+            escaped_srt = (
+                str(srt_path).replace("\\", "\\\\").replace(":", "\\:").replace("'", "'\\''")
+            )
+            vf_final = f"subtitles=filename='{escaped_srt}'"
 
     cmd = ["ffmpeg", "-y", "-i", str(silent_video), "-i", str(narration_path)]
     if vf_final:
