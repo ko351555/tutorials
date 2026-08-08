@@ -1,9 +1,10 @@
 # Pipeline-wide configuration. Secrets go in .env, not here.
 
 channel:
-  blueprint_path: "config/channel_blueprint.yaml"     # identity: name, topics, cadence, contact — see that file
-  style_guide_path: "config/channel_style_guide.md"   # how scripts should sound
-  visual_blueprint_path: "config/visual_blueprint.md" # how images should look
+  blueprint_path: "config/channel_blueprint.yaml"       # identity: name, topics, cadence, contact — see that file
+  style_guide_path: "config/channel_style_guide.md"     # how scripts should sound
+  visual_blueprint_path: "config/visual_blueprint.md"   # how images should look
+  content_strategy_path: "config/content_strategy.md"   # what makes topics work — formula, CPM insight, starter ideas
 
 approvals:
   topic_selection: true

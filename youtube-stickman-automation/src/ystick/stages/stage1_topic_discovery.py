@@ -9,6 +9,10 @@ from ystick.utils.files import parse_json_loose, write_json
 SYSTEM_PROMPT_TEMPLATE = """You generate viral YouTube video ideas for "{name}" — {tagline}
 {description}
 Every idea must fit the channel's core topics: {topics}.
+
+Content strategy for this channel — follow it closely:
+{content_strategy}
+
 Respond with ONLY a JSON array, no prose."""
 
 PROMPT_TEMPLATE = """Seed (a specific idea the creator wants, or blank to pick
@@ -30,12 +34,15 @@ class TopicDiscoveryStage(Stage):
         weights_path = PROJECT_ROOT / cfg.scoring_weights_path
         weights = yaml.safe_load(weights_path.read_text())["criteria"]
         blueprint = ctx.extra["blueprint"]
+        content_strategy_path = PROJECT_ROOT / ctx.settings.channel.content_strategy_path
+        content_strategy = content_strategy_path.read_text() if content_strategy_path.exists() else "(none provided)"
 
         system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
             name=blueprint.name,
             tagline=blueprint.tagline,
             description=blueprint.description.strip(),
             topics=", ".join(blueprint.topics),
+            content_strategy=content_strategy,
         )
         # No idea given -> topic discovery isn't handed a vague generic
         # fallback, it's told to pick from this channel's actual topics.

@@ -188,6 +188,7 @@ youtube-stickman-automation/
 │   ├── settings.yaml                # provider choices, model names, approval toggles
 │   ├── scoring_weights.yaml         # Stage 1 idea-scoring rubric weights
 │   ├── channel_blueprint.yaml       # channel identity: name, topics, cadence, contact, default length
+│   ├── content_strategy.md          # what makes topics work: formula, CPM insight, starter ideas
 │   ├── channel_style_guide.md       # narration voice/tone/structure rules (fill in yours)
 │   └── visual_blueprint.md          # stickman style, palette, character sheet (fill in yours)
 ├── src/ystick/

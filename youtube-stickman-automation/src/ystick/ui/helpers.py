@@ -7,6 +7,7 @@ here — it lives in `data/projects/<id>/project.json`, owned by
 never drift out of sync on what a project was set up to make."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import streamlit as st
@@ -17,6 +18,18 @@ from ystick.config import PROJECT_ROOT
 # bytes of literal text) rather than real media, so we show a caption
 # instead of asking st.audio/st.video to render garbage.
 _MOCK_MEDIA_SIZE_THRESHOLD = 2048
+
+_STARTER_TOPIC_RE = re.compile(r'^\d+\.\s+"([^"]+)"', re.MULTILINE)
+
+
+def load_starter_topics(content_strategy_path: Path) -> list[str]:
+    """Pulls the numbered, quoted example titles out of
+    config/content_strategy.md's "Starter topics" section, so the UI can
+    offer them as one-click starting points. Returns [] if the file is
+    missing or has no such list — callers should treat this as optional."""
+    if not content_strategy_path.exists():
+        return []
+    return _STARTER_TOPIC_RE.findall(content_strategy_path.read_text())
 
 
 def safe_audio(path: Path, label: str = "Narration") -> None:

@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ystick.config import PROJECT_ROOT
 from ystick.core.orchestrator import GATE_AFTER_STAGE, STAGE_TO_GATE, Orchestrator
 from ystick.core.pipeline import STAGE_DESCRIPTIONS, STAGE_LABELS, STAGE_ORDER
 from ystick.state.models import AWAITING_APPROVAL, DONE, FAILED
 from ystick.ui import gates
-from ystick.ui.helpers import tail_log
+from ystick.ui.helpers import load_starter_topics, tail_log
 from ystick.utils.ids import new_project_id
 
 st.set_page_config(page_title="Stickman YouTube Automation", page_icon="🎬", layout="wide")
@@ -139,7 +140,18 @@ def sidebar(orch: Orchestrator) -> str | None:
         st.caption(f"Business: {bp.business_email}")
 
     projects = orch.list_projects()
-    with st.sidebar.expander("➕ New project", expanded=not projects):
+
+    starter_topics = load_starter_topics(PROJECT_ROOT / orch.settings.channel.content_strategy_path)
+    if starter_topics:
+        with st.sidebar.expander("💡 Starter ideas", expanded=False):
+            st.caption("From the channel's content strategy — click one to use it below.")
+            for i, topic in enumerate(starter_topics):
+                if st.button(topic, key=f"starter_{i}", use_container_width=True):
+                    st.session_state["new_idea"] = topic
+                    st.session_state["_expand_new_project"] = True
+                    st.rerun()
+
+    with st.sidebar.expander("➕ New project", expanded=st.session_state.get("_expand_new_project", not projects)):
         idea = st.text_input(
             "Video idea (optional)",
             key="new_idea",
@@ -153,6 +165,7 @@ def sidebar(orch: Orchestrator) -> str | None:
             project_id = new_project_id(idea or bp.name)
             orch.init_project(project_id, idea, target_minutes=int(minutes), mock=mock)
             st.session_state["current_project"] = project_id
+            st.session_state["_expand_new_project"] = False
             st.rerun()
 
     st.sidebar.divider()
