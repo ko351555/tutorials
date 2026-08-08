@@ -32,17 +32,31 @@ Generate a JSON object with keys:
 - thumbnail_text: <=5 words, the on-thumbnail caption
 - thumbnail_prompts: array of exactly 5 complete, ready-to-paste
   image-generation prompts (for ChatGPT/DALL-E/Gemini) for the 5 HIGHEST-CTR
-  thumbnail concepts for this video. Each must apply proven high-CTR
-  thumbnail principles — pick a DIFFERENT angle per prompt, e.g.:
-  1. exaggerated stickman facial expression/reaction (shock, curiosity)
-  2. a visual curiosity gap (something partially hidden/obscured, a big "?")
-  3. bold high-contrast color blocking with the subject isolated from the background
-  4. a before/after or comparison split-frame
-  5. a big bold number or symbol tied to the video's hook
-  Each prompt must also specify: 3-4 words max of bold on-image text,
-  high color contrast, subject large and off-center (rule of thirds), no
-  clutter — and must follow the visual blueprint's style/character/palette
-  so it still matches the video.
+  thumbnail concepts for THIS SPECIFIC VIDEO. First identify this video's
+  actual counterintuitive hook, named framework/bias/rule, specific
+  number/stat, or before/after transformation from the title and script
+  excerpt above — then build each prompt around THAT concrete detail, not
+  a generic placeholder. ("Shocked stickman next to the words 'Bird in
+  Hand Bias'" is a real prompt; "exaggerated reaction to the topic" is not
+  — it names nothing a viewer would recognize.) Apply a DIFFERENT proven
+  high-CTR angle per prompt, each grounded in this video's actual content:
+  1. exaggerated stickman facial expression reacting to the video's
+     specific claim or number (not "the topic" — the actual claim)
+  2. a visual curiosity gap built from what this video's hook withholds
+     (something partially hidden/obscured, a big "?" over the specific
+     detail being teased)
+  3. bold high-contrast color blocking with the video's named
+     framework/rule/number rendered as bold on-image text
+  4. a before/after or comparison split-frame showing this video's actual
+     transformation or contrast (e.g. poor vs. rich, before vs. after
+     applying the rule)
+  5. the video's specific number/stat/rule name as a giant bold visual
+     element the stickman is pointing at or reacting to
+  Each prompt must also specify: 3-4 words max of bold on-image text
+  (drawn from the actual hook, not generic), high color contrast, subject
+  large and off-center (rule of thirds), no clutter — and must follow the
+  visual blueprint's style/character/palette so it still matches the
+  video.
 - chapters: array of {{"time","label"}}
 - pinned_comment, community_post, shorts_title, shorts_description
 """
