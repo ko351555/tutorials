@@ -229,32 +229,45 @@ def main() -> None:
         render_stage_tracker(status_by_stage)
         st.divider()
 
-        kind, detail = find_blocking_condition(orch, project_id, status_by_stage)
-
-        if kind == "failed":
-            stage_name = detail
-            s = status_by_stage[stage_name]
-            # A project that already passed the Prompts stage before manual
-            # image mode was turned on skips straight past the image_upload
-            # gate (it can't fire retroactively) and fails here instead —
-            # show the same upload widgets rather than just an error dump.
-            if stage_name == "image_generation" and not meta["mock"] and orch.secrets.image_gen_provider == "manual":
-                st.caption(f"Stage **{STAGE_LABELS[stage_name]}** — attempt {s.attempts}")
-                gates.render_image_upload_recovery(project_dir)
-            else:
-                st.error(
-                    f"Stage **{STAGE_LABELS[stage_name]}** failed (attempt {s.attempts}):\n\n```\n{s.last_error}\n```"
-                )
-            if st.button("🔁 Retry", type="primary"):
-                run_with_progress(orch, project_id)
-        elif kind == "awaiting_approval":
-            GATE_RENDERERS[detail](orch, project_id, project_dir)
-        elif all(s.status == DONE for s in states):
-            st.success("Pipeline complete! Check the **Results** tab for everything it produced.")
+        # A button clicked this same script run doesn't retroactively hide
+        # whatever was already drawn above it (the "Ready to run"/"Retry"
+        # button and its context box) — Streamlit just keeps appending
+        # below. So a button click only sets a flag + reruns; the actual
+        # run (and everything that would otherwise sit stale above the
+        # live progress) happens on the next run, once we already know to
+        # skip straight to run_with_progress.
+        if st.session_state.get("_run_requested") == project_id:
+            st.session_state["_run_requested"] = None
+            run_with_progress(orch, project_id)
         else:
-            st.info("Ready to run." + (" (mock mode)" if meta["mock"] else ""))
-            if st.button("▶️ Run pipeline", type="primary"):
-                run_with_progress(orch, project_id)
+            kind, detail = find_blocking_condition(orch, project_id, status_by_stage)
+
+            if kind == "failed":
+                stage_name = detail
+                s = status_by_stage[stage_name]
+                # A project that already passed the Prompts stage before manual
+                # image mode was turned on skips straight past the image_upload
+                # gate (it can't fire retroactively) and fails here instead —
+                # show the same upload widgets rather than just an error dump.
+                if stage_name == "image_generation" and not meta["mock"] and orch.secrets.image_gen_provider == "manual":
+                    st.caption(f"Stage **{STAGE_LABELS[stage_name]}** — attempt {s.attempts}")
+                    gates.render_image_upload_recovery(project_dir)
+                else:
+                    st.error(
+                        f"Stage **{STAGE_LABELS[stage_name]}** failed (attempt {s.attempts}):\n\n```\n{s.last_error}\n```"
+                    )
+                if st.button("🔁 Retry", type="primary"):
+                    st.session_state["_run_requested"] = project_id
+                    st.rerun()
+            elif kind == "awaiting_approval":
+                GATE_RENDERERS[detail](orch, project_id, project_dir)
+            elif all(s.status == DONE for s in states):
+                st.success("Pipeline complete! Check the **Results** tab for everything it produced.")
+            else:
+                st.info("Ready to run." + (" (mock mode)" if meta["mock"] else ""))
+                if st.button("▶️ Run pipeline", type="primary"):
+                    st.session_state["_run_requested"] = project_id
+                    st.rerun()
 
     with tab_results:
         gates.render_stage_results(project_dir, status_by_stage)
