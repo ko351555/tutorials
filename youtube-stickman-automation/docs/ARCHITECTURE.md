@@ -40,7 +40,7 @@ crash.
      │                     data/projects/<project_id>/                │
      │  01_ideas/ 02_script/ 03_audio/ 04_transcript/ 05_storyboard/   │
      │  06_prompts/ 07_images/ 08_assembly/ 09_final/ 09b_captions/    │
-     │  10_packaging/                                                 │
+     │  09c_shorts/ 10_packaging/                                     │
      └────────────────────────────────────────────────────────────────┘
                                           ▲
                                           │ each stage is isolated, idempotent,
@@ -61,14 +61,32 @@ crash.
                  gate: topic          gate: script        gate: storyboard       gate: final cut/packaging
 ```
 
-A stage sits between Stage 9 (Canva) and Stage 10 (YouTube) not shown in the
-table above for column width: **Stage 9b — Caption Burn-In**
+Two stages sit between Stage 9 (Canva) and Stage 10 (YouTube), not shown in
+the table above for column width:
+
+**Stage 9b — Caption Burn-In**
 (`stage9b_caption_burn_in.py`, folder `09b_captions/`). It burns the
 narration's SRT (written by Stage 8, reused here) into the branded cut so
 the `final_review` gate — and Stage 10's upload — see the actual finished
 video, captions included. Same FFmpeg backbone as Stage 8; if the local
 ffmpeg build has no libass (`subtitles` filter missing), it passes the
 branded cut through uncaptioned instead of failing the stage — see §6.
+
+**Stage 9c — Shorts Creation**
+(`stage9c_shorts_creation.py`, folder `09c_shorts/`). Produces a vertical
+(9:16) Short from assets the long-form pipeline already paid for — no new
+image generation. An LLM call picks the strongest standalone 40-50s window
+from the full narration (falling back to the video's opening hook if the
+pick is invalid or off-brief), then that window's audio is trimmed
+(`trim_audio()`, ffmpeg `-ss`/`-t`, no new voice-gen API call), its
+overlapping storyboard scenes are sliced and re-timed relative to the new
+start, and its subtitle lines are re-windowed the same way. Reassembled
+with the same `build_video()` Stage 8 uses, just `resolution="1080x1920"`
+instead of `"1920x1080"` — no shorts-specific FFmpeg path needed. Stage 10
+uploads it as a second private draft (using `packaging.json`'s
+`shorts_title`/`shorts_description`, already generated but previously
+unused) when `stages.youtube_packaging.generate_shorts_variant` is on.
+Toggle off entirely via `stages.shorts_creation.enabled: false`.
 
 Design principles:
 
@@ -232,6 +250,7 @@ youtube-stickman-automation/
 │   │   ├── stage8_video_assembly.py
 │   │   ├── stage9_canva_finishing.py
 │   │   ├── stage9b_caption_burn_in.py
+│   │   ├── stage9c_shorts_creation.py
 │   │   └── stage10_youtube_packaging.py
 │   ├── ui/                          # Streamlit dashboard — see §11
 │   │   ├── app.py                   # entrypoint: sidebar, stage tracker, run control
@@ -254,6 +273,7 @@ youtube-stickman-automation/
 │       ├── 08_assembly/rough_cut.mp4, narration.srt
 │       ├── 09_final/branded_cut.mp4
 │       ├── 09b_captions/final_cut.mp4
+│       ├── 09c_shorts/shorts_cut.mp4 (9:16, reuses existing scene images)
 │       ├── 10_packaging/packaging.json
 │       └── run_state.json           # human-readable mirror of the SQLite row
 ├── logs/<project_id>.log

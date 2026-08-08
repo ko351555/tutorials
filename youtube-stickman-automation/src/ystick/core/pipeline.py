@@ -51,6 +51,7 @@ STAGE_ORDER: list[str] = [
     "video_assembly",
     "canva_finishing",
     "caption_burn_in",
+    "shorts_creation",
     "youtube_packaging",
 ]
 
@@ -66,6 +67,7 @@ STAGE_FOLDERS: dict[str, str] = {
     "video_assembly": "08_assembly",
     "canva_finishing": "09_final",
     "caption_burn_in": "09b_captions",
+    "shorts_creation": "09c_shorts",
     "youtube_packaging": "10_packaging",
 }
 
@@ -82,6 +84,7 @@ STAGE_LABELS: dict[str, str] = {
     "video_assembly": "Assembly",
     "canva_finishing": "Branding",
     "caption_burn_in": "Captions",
+    "shorts_creation": "Shorts",
     "youtube_packaging": "Packaging",
 }
 
@@ -99,5 +102,6 @@ STAGE_DESCRIPTIONS: dict[str, str] = {
     "video_assembly": "Assembles the images, narration, and pan/zoom into a rough-cut video.",
     "canva_finishing": "Applies branding (intro/outro) via Canva to produce the finished cut.",
     "caption_burn_in": "Burns the narration captions into the branded cut, producing the final video.",
+    "shorts_creation": "Picks the strongest standalone excerpt and reassembles it as a vertical (9:16) Short — no new images generated.",
     "youtube_packaging": "Drafts title, description, tags, chapters, thumbnail concept, and social copy.",
 }

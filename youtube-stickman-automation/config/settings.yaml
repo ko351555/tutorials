@@ -44,6 +44,12 @@ stages:
     hero_clips_dir: "08_assembly/hero_clips"
   canva_finishing:
     template_id: "${CANVA_BRAND_TEMPLATE_ID}"
+  shorts_creation:
+    enabled: true          # produces a vertical (9:16) Short from existing assets — no new image-gen cost
+    target_seconds_min: 40
+    target_seconds_max: 50
+    fps: 30
+    ken_burns: true
   youtube_packaging:
     upload_as: "private"
     generate_shorts_variant: true

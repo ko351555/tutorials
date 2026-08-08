@@ -324,6 +324,15 @@ def _preview_caption_burn_in(project_dir: Path) -> None:
     safe_video(path, "Final cut (branded + captioned)")
 
 
+def _preview_shorts_creation(project_dir: Path) -> None:
+    path = project_dir / STAGE_FOLDERS["shorts_creation"] / "shorts_cut.mp4"
+    if not path.exists():
+        st.caption("Shorts creation is disabled (stages.shorts_creation.enabled: false in settings.yaml).")
+        return
+    st.caption(f"`{path}` — vertical (9:16), reuses the existing scene images, no extra image-gen cost.")
+    safe_video(path, "Short (9:16)")
+
+
 def _preview_youtube_packaging(project_dir: Path) -> None:
     path = project_dir / STAGE_FOLDERS["youtube_packaging"] / "packaging.json"
     if not path.exists():
@@ -374,6 +383,14 @@ def _preview_youtube_packaging(project_dir: Path) -> None:
     elif upload.get("video_id"):
         st.success(f"Draft uploaded to YouTube (private): video_id={upload['video_id']}")
 
+    shorts_upload = packaging.get("youtube_upload_short", {})
+    if shorts_upload.get("status") == "mock":
+        st.info("Mock mode: no real Short upload was made.")
+    elif shorts_upload.get("video_id"):
+        st.success(f"Short draft uploaded to YouTube (private): video_id={shorts_upload['video_id']}")
+    elif shorts_upload.get("status") == "skipped_not_configured":
+        st.caption("Short draft upload skipped — YouTube OAuth not configured (video/metadata are still ready).")
+
 
 STAGE_PREVIEWS = {
     "topic_discovery": _preview_topic_discovery,
@@ -386,6 +403,7 @@ STAGE_PREVIEWS = {
     "video_assembly": _preview_video_assembly,
     "canva_finishing": _preview_canva_finishing,
     "caption_burn_in": _preview_caption_burn_in,
+    "shorts_creation": _preview_shorts_creation,
     "youtube_packaging": _preview_youtube_packaging,
 }
 

@@ -52,6 +52,24 @@ def run_ffmpeg(cmd: list[str]) -> None:
         ) from exc
 
 
+def trim_audio(src_path: Path, start_ms: int, end_ms: int, out_path: Path, *, mock: bool = False) -> Path:
+    """Cuts [start_ms, end_ms) out of src_path — used by Shorts creation to
+    pull a standalone clip's narration out of the full-length audio without
+    a second voice-generation API call."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if mock or not _ffmpeg_available():
+        out_path.write_bytes(b"MOCK_MP3_PLACEHOLDER")
+        return out_path
+    # -ss before -i seeks the demuxer directly (fast, and accurate for
+    # re-encoded output) rather than decoding-and-discarding up to the cut
+    # point.
+    run_ffmpeg([
+        "ffmpeg", "-y", "-ss", str(start_ms / 1000), "-i", str(src_path),
+        "-t", str((end_ms - start_ms) / 1000), "-c:a", "libmp3lame", str(out_path),
+    ])
+    return out_path
+
+
 def _subtitles_vf_arg(srt_path: Path) -> str | None:
     """Builds the -vf value to burn `srt_path` in, or None if it can't/
     shouldn't be burned in (missing file, or the filter isn't compiled into

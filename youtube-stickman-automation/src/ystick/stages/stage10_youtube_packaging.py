@@ -114,9 +114,9 @@ class YoutubePackagingStage(Stage):
         out_dir = ctx.project_dir / STAGE_FOLDERS[self.name]
 
         upload_result = {"status": "skipped"}
+        client = YouTubeClient(ctx.secrets, mock=ctx.mock)
         if cfg.upload_as:
             final_cut = ctx.project_dir / STAGE_FOLDERS["caption_burn_in"] / "final_cut.mp4"
-            client = YouTubeClient(ctx.secrets, mock=ctx.mock)
             upload_result = client.create_draft(
                 final_cut,
                 {"title": packaging["title"], "description": packaging["description"], "tags": packaging["tags"]},
@@ -124,5 +124,23 @@ class YoutubePackagingStage(Stage):
             )
         packaging["youtube_upload"] = upload_result
 
+        shorts_upload_result = {"status": "skipped"}
+        shorts_cut = ctx.project_dir / STAGE_FOLDERS["shorts_creation"] / "shorts_cut.mp4"
+        if cfg.upload_as and cfg.generate_shorts_variant and shorts_cut.exists():
+            shorts_upload_result = client.create_draft(
+                shorts_cut,
+                {
+                    "title": packaging.get("shorts_title") or packaging["title"],
+                    "description": packaging.get("shorts_description") or packaging["description"],
+                    "tags": packaging["tags"],
+                },
+                privacy=cfg.upload_as,
+            )
+        packaging["youtube_upload_short"] = shorts_upload_result
+
         write_json(out_dir / "packaging.json", packaging)
-        return {"title": packaging["title"], "upload_status": upload_result["status"]}
+        return {
+            "title": packaging["title"],
+            "upload_status": upload_result["status"],
+            "shorts_upload_status": shorts_upload_result["status"],
+        }

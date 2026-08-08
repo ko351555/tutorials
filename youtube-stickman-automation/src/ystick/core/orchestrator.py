@@ -62,6 +62,7 @@ def _build_stage_registry():
     from ystick.stages.stage8_video_assembly import VideoAssemblyStage
     from ystick.stages.stage9_canva_finishing import CanvaFinishingStage
     from ystick.stages.stage9b_caption_burn_in import CaptionBurnInStage
+    from ystick.stages.stage9c_shorts_creation import ShortsCreationStage
     from ystick.stages.stage10_youtube_packaging import YoutubePackagingStage
 
     stages = [
@@ -75,6 +76,7 @@ def _build_stage_registry():
         VideoAssemblyStage(),
         CanvaFinishingStage(),
         CaptionBurnInStage(),
+        ShortsCreationStage(),
         YoutubePackagingStage(),
     ]
     return {s.name: s for s in stages}

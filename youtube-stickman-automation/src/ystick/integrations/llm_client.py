@@ -126,6 +126,11 @@ class LLMClient:
             )
         if mock_key == "scene_prompt":
             return f"[MOCK IMAGE PROMPT {variant}] stickman doodle, placeholder scene"
+        if mock_key == "shorts_excerpt":
+            # Deliberately out of range (mock narration is only a few
+            # seconds long) so callers exercise their own fallback-window
+            # logic rather than trusting this blindly.
+            return json.dumps({"start_ms": 0, "end_ms": 999_999_999, "reason": "[MOCK] placeholder excerpt pick"})
         if mock_key == "packaging":
             return json.dumps(
                 {
