@@ -234,9 +234,17 @@ def main() -> None:
         if kind == "failed":
             stage_name = detail
             s = status_by_stage[stage_name]
-            st.error(
-                f"Stage **{STAGE_LABELS[stage_name]}** failed (attempt {s.attempts}):\n\n```\n{s.last_error}\n```"
-            )
+            # A project that already passed the Prompts stage before manual
+            # image mode was turned on skips straight past the image_upload
+            # gate (it can't fire retroactively) and fails here instead —
+            # show the same upload widgets rather than just an error dump.
+            if stage_name == "image_generation" and not meta["mock"] and orch.secrets.image_gen_provider == "manual":
+                st.caption(f"Stage **{STAGE_LABELS[stage_name]}** — attempt {s.attempts}")
+                gates.render_image_upload_recovery(project_dir)
+            else:
+                st.error(
+                    f"Stage **{STAGE_LABELS[stage_name]}** failed (attempt {s.attempts}):\n\n```\n{s.last_error}\n```"
+                )
             if st.button("🔁 Retry", type="primary"):
                 run_with_progress(orch, project_id)
         elif kind == "awaiting_approval":

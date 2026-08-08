@@ -114,21 +114,12 @@ def render_storyboard_review(orch: Orchestrator, project_id: str, project_dir: P
     st.caption(_next_stage_note("scene_planning"))
 
 
-def render_image_upload(orch: Orchestrator, project_id: str, project_dir: Path) -> None:
-    """Fires automatically when IMAGE_GEN_PROVIDER=manual — no image-gen API
-    key needed at all. Shows each scene's prompt (copy it into ChatGPT or
-    whatever tool you like) and a slot to upload the result directly."""
+def _render_upload_widgets(project_dir: Path) -> tuple[int, int]:
+    """The per-scene prompt + upload-slot UI, shared by the image_upload
+    gate and the failure-recovery view below. Returns (uploaded, total)."""
     prompts = read_json(project_dir / STAGE_FOLDERS["image_prompts"] / "image_prompts.json")
     images_dir = project_dir / STAGE_FOLDERS["image_generation"]
     needs_upload = [e for e in prompts if "prompt" in e]
-
-    st.subheader("🖼️ Generate images manually, then upload them here")
-    st.caption(
-        "No image-gen API key needed — copy each prompt below into ChatGPT "
-        "(or any image tool), download the result, and upload it in the "
-        "matching slot. Scenes that reuse a previous image are handled "
-        "automatically and don't need an upload."
-    )
 
     uploaded_count = 0
     for step, entry in enumerate(needs_upload, start=1):
@@ -165,8 +156,24 @@ def render_image_upload(orch: Orchestrator, project_id: str, project_dir: Path) 
                 st.session_state[processed_key] = uploaded_file.file_id
                 st.rerun()
 
+    return uploaded_count, len(needs_upload)
+
+
+def render_image_upload(orch: Orchestrator, project_id: str, project_dir: Path) -> None:
+    """Fires automatically when IMAGE_GEN_PROVIDER=manual — no image-gen API
+    key needed at all. Shows each scene's prompt (copy it into ChatGPT or
+    whatever tool you like) and a slot to upload the result directly."""
+    st.subheader("🖼️ Generate images manually, then upload them here")
+    st.caption(
+        "No image-gen API key needed — copy each prompt below into ChatGPT "
+        "(or any image tool), download the result, and upload it in the "
+        "matching slot. Scenes that reuse a previous image are handled "
+        "automatically and don't need an upload."
+    )
+
+    uploaded_count, total = _render_upload_widgets(project_dir)
+
     st.divider()
-    total = len(needs_upload)
     st.progress(uploaded_count / total if total else 1.0, text=f"{uploaded_count} of {total} images uploaded")
     if st.button("✅ Approve & Continue", type="primary", disabled=uploaded_count < total):
         orch.approve(project_id, "image_upload", {})
@@ -175,6 +182,28 @@ def render_image_upload(orch: Orchestrator, project_id: str, project_dir: Path) 
         st.caption(f"Upload the remaining {total - uploaded_count} image(s) to continue.")
     else:
         st.caption(_next_stage_note("image_prompts"))
+
+
+def render_image_upload_recovery(project_dir: Path) -> None:
+    """Shown instead of a plain error box when Stage 7 (Images) fails in
+    manual mode. This happens when a project already passed the Prompts
+    stage — and so the image_upload gate — in an earlier run, before
+    IMAGE_GEN_PROVIDER was set to manual; the gate can't fire
+    retroactively for a stage that's already done. Same upload widgets as
+    the gate; the caller's Retry button re-runs Stage 7 once everything's
+    uploaded — there's no approval to record here."""
+    st.warning(
+        "This project already passed the upload step in an earlier run, "
+        "before manual image mode was turned on — so it went straight "
+        "to trying the API and failed. Upload the images below, then "
+        "click Retry."
+    )
+    uploaded_count, total = _render_upload_widgets(project_dir)
+    st.progress(uploaded_count / total if total else 1.0, text=f"{uploaded_count} of {total} images uploaded")
+    if uploaded_count < total:
+        st.caption(f"Upload the remaining {total - uploaded_count} image(s), then click Retry below.")
+    else:
+        st.success("All images uploaded — click Retry below to continue.")
 
 
 def render_final_review(orch: Orchestrator, project_id: str, project_dir: Path) -> None:
