@@ -188,7 +188,9 @@ def sidebar(orch: Orchestrator) -> str | None:
 
 def advanced_panel(orch: Orchestrator, project_id: str) -> None:
     with st.sidebar.expander("⚠️ Advanced"):
-        stage = st.selectbox("Reset from stage", STAGE_ORDER, key="reset_stage")
+        stage = st.selectbox(
+            "Reset from stage", STAGE_ORDER, format_func=lambda s: STAGE_LABELS[s], key="reset_stage"
+        )
         st.caption("Re-runs this stage and everything after it. Does not delete existing files.")
         if st.button("Reset", use_container_width=True):
             orch.force_from(project_id, stage)
