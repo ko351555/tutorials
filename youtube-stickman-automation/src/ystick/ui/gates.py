@@ -331,8 +331,14 @@ def _preview_youtube_packaging(project_dir: Path) -> None:
         return
     packaging = read_json(path)
 
-    st.text_input("Title", value=packaging.get("title", ""), key="preview_title")
-    st.text_area("Description", value=packaging.get("description", ""), height=120, key="preview_description")
+    # Every field below uses st.code (not text_input/text_area) purely for
+    # its built-in hover copy-button — this is a read-only preview, nothing
+    # here is meant to be edited in place.
+    st.write("**Title**")
+    st.code(packaging.get("title", ""), language=None)
+
+    st.write("**Description**")
+    st.code(packaging.get("description", ""), language=None)
 
     st.write("**Tags** — copy this straight into YouTube Studio's tags field:")
     tags = packaging.get("tags", [])
@@ -340,12 +346,17 @@ def _preview_youtube_packaging(project_dir: Path) -> None:
 
     col1, col2 = st.columns(2)
     with col1:
-        st.text_input("Thumbnail text", value=packaging.get("thumbnail_text", ""), key="preview_thumb_text")
-        st.text_area("Pinned comment", value=packaging.get("pinned_comment", ""), height=80, key="preview_pinned")
+        st.write("**Thumbnail text**")
+        st.code(packaging.get("thumbnail_text", ""), language=None)
+        st.write("**Pinned comment**")
+        st.code(packaging.get("pinned_comment", ""), language=None)
     with col2:
-        st.text_input("Shorts title", value=packaging.get("shorts_title", ""), key="preview_shorts_title")
-        st.text_area("Shorts description", value=packaging.get("shorts_description", ""), height=80, key="preview_shorts_desc")
-        st.text_area("Community post", value=packaging.get("community_post", ""), height=80, key="preview_community")
+        st.write("**Shorts title**")
+        st.code(packaging.get("shorts_title", ""), language=None)
+        st.write("**Shorts description**")
+        st.code(packaging.get("shorts_description", ""), language=None)
+        st.write("**Community post**")
+        st.code(packaging.get("community_post", ""), language=None)
 
     if packaging.get("chapters"):
         st.write("**Chapters**")
@@ -353,10 +364,9 @@ def _preview_youtube_packaging(project_dir: Path) -> None:
 
     thumbnail_prompts = packaging.get("thumbnail_prompts", [])
     if thumbnail_prompts:
-        st.write("**5 high-CTR thumbnail prompts** — paste any of these into ChatGPT/DALL-E/Gemini to generate a thumbnail:")
-        for i, thumb_prompt in enumerate(thumbnail_prompts, start=1):
-            st.caption(f"Option {i}")
-            st.code(thumb_prompt, language=None)
+        st.write("**5 high-CTR thumbnail prompts** — paste any one into ChatGPT/DALL-E/Gemini to generate a thumbnail:")
+        numbered = [f"{i}. {p}" for i, p in enumerate(thumbnail_prompts, start=1)]
+        st.code("\n\n".join(numbered), language=None)
 
     upload = packaging.get("youtube_upload", {})
     if upload.get("status") == "mock":
