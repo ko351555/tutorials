@@ -81,6 +81,23 @@ class Secrets(BaseSettings):
     canva_client_id: str = ""
     canva_client_secret: str = ""
     canva_brand_template_id: str = ""
+    # Obtained via `ystick canva-auth` (one-time interactive OAuth2/PKCE
+    # consent flow) — never set by hand. Long-lived; the pipeline mints a
+    # fresh short-lived access token from this on every Canva call.
+    canva_refresh_token: str = ""
+    # Must exactly match a Redirect URI registered on the integration at
+    # canva.com/developers — canva-auth uses this as a paste-back landing
+    # page, not a real listening server (see canva_client.py).
+    canva_redirect_uri: str = "http://127.0.0.1:8765/callback"
+    # Space-separated. Canva's exact scope catalog can shift — if
+    # canva-auth's authorization step is rejected, check
+    # https://www.canva.com/developers/docs/connect-api/authentication/
+    # and override here to match what your integration is permitted to
+    # request.
+    canva_scopes: str = (
+        "design:content:read design:content:write design:meta:read "
+        "brandtemplate:content:read brandtemplate:meta:read asset:read asset:write"
+    )
 
     youtube_oauth_client_id: str = ""
     youtube_oauth_client_secret: str = ""

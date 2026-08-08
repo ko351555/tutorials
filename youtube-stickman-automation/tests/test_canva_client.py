@@ -1,6 +1,10 @@
 from pathlib import Path
 
+import pytest
+
 from ystick.config import Secrets
+from ystick.core.exceptions import FatalError
+from ystick.integrations import canva_client as canva_client_module
 from ystick.integrations.canva_client import CanvaClient
 
 
@@ -41,3 +45,57 @@ def test_configured_requires_all_three_credentials():
             canva_client_secret="secret_1",
         )
     )._configured()
+
+
+def test_access_token_without_refresh_token_points_to_canva_auth():
+    client = CanvaClient(Secrets(canva_client_id="c", canva_client_secret="s"), mock=False)
+    with pytest.raises(FatalError, match="ystick canva-auth"):
+        client._access_token()
+
+
+class _FakeResponse:
+    def __init__(self, status_code: int, json_body: dict):
+        self.status_code = status_code
+        self._json_body = json_body
+        self.text = str(json_body)
+
+    def json(self):
+        return self._json_body
+
+
+def test_access_token_refreshes_using_stored_refresh_token(monkeypatch):
+    captured = {}
+
+    def fake_post(url, data=None, timeout=None):
+        captured["url"] = url
+        captured["data"] = data
+        return _FakeResponse(200, {"access_token": "fresh-access-token", "expires_in": 3600})
+
+    monkeypatch.setattr(canva_client_module.requests, "post", fake_post)
+
+    client = CanvaClient(
+        Secrets(canva_client_id="c", canva_client_secret="s", canva_refresh_token="stored-refresh"),
+        mock=False,
+    )
+    token = client._access_token()
+
+    assert token == "fresh-access-token"
+    assert captured["url"] == canva_client_module.TOKEN_URL
+    assert captured["data"]["grant_type"] == "refresh_token"
+    assert captured["data"]["refresh_token"] == "stored-refresh"
+    assert captured["data"]["client_id"] == "c"
+    assert captured["data"]["client_secret"] == "s"
+
+
+def test_access_token_expired_refresh_token_gives_actionable_error(monkeypatch):
+    def fake_post(url, data=None, timeout=None):
+        return _FakeResponse(400, {"error": "invalid_grant"})
+
+    monkeypatch.setattr(canva_client_module.requests, "post", fake_post)
+
+    client = CanvaClient(
+        Secrets(canva_client_id="c", canva_client_secret="s", canva_refresh_token="stale"),
+        mock=False,
+    )
+    with pytest.raises(FatalError, match="ystick canva-auth"):
+        client._access_token()

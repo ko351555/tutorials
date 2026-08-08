@@ -8,14 +8,15 @@ template, then splice them around the rough cut with FFmpeg. Build the
 Brand Template once in Canva's editor with named fields, record its
 template_id in .env, and this becomes a fully automated step.
 
-Requires a one-time OAuth setup (Canva Connect apps use OAuth2 with PKCE);
-this client assumes an already-obtained access token is available via
-secrets — wire up the OAuth exchange in your deployment before going live.
+Canva Connect apps use OAuth2 with PKCE and no client-side redirect
+listener is assumed — run `ystick canva-auth` once (see
+core/canva_oauth_setup.py) to mint a long-lived CANVA_REFRESH_TOKEN via a
+paste-back flow, then this client silently exchanges it for a fresh
+short-lived access token on every call.
 """
 from __future__ import annotations
 
 import shutil
-import subprocess
 import time
 from pathlib import Path
 
@@ -24,11 +25,14 @@ import structlog
 
 from ystick.config import Secrets
 from ystick.core.exceptions import FatalError, RetryableError
+from ystick.integrations.video_assembly import run_ffmpeg
 
 log = structlog.get_logger()
 
 AUTOFILL_URL = "https://api.canva.com/rest/v1/autofills"
 EXPORT_URL = "https://api.canva.com/rest/v1/exports"
+TOKEN_URL = "https://api.canva.com/rest/v1/oauth/token"
+AUTHORIZATION_URL = "https://www.canva.com/api/oauth/authorize"
 
 
 class CanvaClient:
@@ -44,13 +48,44 @@ class CanvaClient:
         )
 
     def _access_token(self) -> str:
-        # TODO: implement the OAuth2 (PKCE) exchange/refresh for Canva
-        # Connect and cache the token; client_id/secret are already read
-        # from .env via Secrets.
-        raise FatalError(
-            "Canva OAuth access token not configured — implement the OAuth "
-            "exchange in canva_client.py._access_token() before going live."
-        )
+        if not self.secrets.canva_refresh_token:
+            raise FatalError(
+                "Canva not authorized yet — run `ystick canva-auth` once (needs "
+                "CANVA_CLIENT_ID/CANVA_CLIENT_SECRET already set in .env) to mint "
+                "a CANVA_REFRESH_TOKEN, then add it to .env."
+            )
+        try:
+            resp = requests.post(
+                TOKEN_URL,
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": self.secrets.canva_refresh_token,
+                    "client_id": self.secrets.canva_client_id,
+                    "client_secret": self.secrets.canva_client_secret,
+                },
+                timeout=30,
+            )
+        except requests.RequestException as exc:
+            raise RetryableError(f"Canva token refresh failed: {exc}") from exc
+        if resp.status_code >= 500:
+            raise RetryableError(f"Canva token refresh {resp.status_code}")
+        if resp.status_code >= 400:
+            raise FatalError(
+                f"Canva token refresh {resp.status_code} — CANVA_REFRESH_TOKEN may be "
+                f"revoked or expired; re-run `ystick canva-auth`: {resp.text[:500]}"
+            )
+        body = resp.json()
+        new_refresh_token = body.get("refresh_token")
+        if new_refresh_token and new_refresh_token != self.secrets.canva_refresh_token:
+            # Some OAuth providers rotate the refresh token on every use.
+            # Don't silently rewrite .env — surface it so the human updates
+            # it (the old one may already be invalid after this call).
+            log.warning(
+                "canva.refresh_token_rotated",
+                detail="Canva issued a new refresh token — update CANVA_REFRESH_TOKEN "
+                f"in .env to: {new_refresh_token}",
+            )
+        return body["access_token"]
 
     def _export_template_clip(self, fields: dict, out_path: Path) -> Path:
         if not self.secrets.canva_brand_template_id:
@@ -120,9 +155,8 @@ class CanvaClient:
         concat_list.write_text(
             "\n".join(f"file '{p.resolve()}'" for p in [intro, rough_cut, outro])
         )
-        subprocess.run(
-            ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_list),
-             "-c:v", "libx264", "-c:a", "aac", str(out_path)],
-            check=True, capture_output=True,
-        )
+        run_ffmpeg([
+            "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_list),
+            "-c:v", "libx264", "-c:a", "aac", str(out_path),
+        ])
         return out_path

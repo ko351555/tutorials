@@ -5,7 +5,9 @@ from typing import Optional
 import typer
 
 from ystick.approvals import describe_pending
+from ystick.config import load_secrets
 from ystick.core.orchestrator import GATE_AFTER_STAGE, Orchestrator
+from ystick.integrations import canva_oauth
 from ystick.logging_conf import configure_logging
 from ystick.state.models import AWAITING_APPROVAL, DONE, FAILED
 from ystick.utils.ids import new_project_id
@@ -78,6 +80,41 @@ def approve(
     orch = Orchestrator()
     orch.approve(project_id, stage, {"select": select})
     typer.echo(f"Approved {stage} for {project_id}. Run `ystick run {project_id}` to continue.")
+
+
+@app.command("canva-auth")
+def canva_auth():
+    """One-time interactive OAuth2/PKCE authorization for Canva Connect.
+    Requires CANVA_CLIENT_ID/CANVA_CLIENT_SECRET already set in .env (from
+    a Canva integration at canva.com/developers, with CANVA_REDIRECT_URI
+    registered as one of its Redirect URIs). Prints a CANVA_REFRESH_TOKEN
+    to add to .env — after that, Canva branding just works, no further
+    manual steps."""
+    secrets = load_secrets()
+    if not secrets.canva_client_id or not secrets.canva_client_secret:
+        typer.echo("CANVA_CLIENT_ID and CANVA_CLIENT_SECRET must be set in .env first.")
+        typer.echo("Get them from an integration at https://www.canva.com/developers/")
+        raise typer.Exit(1)
+
+    verifier, challenge = canva_oauth.generate_pkce_pair()
+    state = canva_oauth.generate_state()
+    auth_url = canva_oauth.build_authorization_url(secrets, state, challenge)
+
+    typer.echo("1. Open this URL in a browser and approve access:\n")
+    typer.echo(f"   {auth_url}\n")
+    typer.echo(
+        f"2. Canva will redirect to {secrets.canva_redirect_uri} — that page will "
+        "likely show a browser error (nothing's listening there), which is fine. "
+        "Copy the FULL URL from the address bar at that point.\n"
+    )
+    pasted = typer.prompt("3. Paste that URL here (or just the `code` value)")
+
+    code = canva_oauth.extract_code_from_redirect(pasted, expected_state=state)
+    tokens = canva_oauth.exchange_code_for_tokens(secrets, code, verifier)
+
+    typer.echo("\nSuccess. Add this to your .env:\n")
+    typer.echo(f"CANVA_REFRESH_TOKEN={tokens['refresh_token']}\n")
+    typer.echo("Canva branding will work automatically from the next pipeline run.")
 
 
 @app.command("force-from")

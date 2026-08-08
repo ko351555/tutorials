@@ -432,16 +432,22 @@ pipeline.
 ### Canva — Stage 9 (branding/finishing)
 Canva Connect APIs are real and documented: **Autofill API** populates a
 pre-built Brand Template's named fields (intro text, outro card, lower
-thirds, logo placeholder) and the **Export API** renders the result. This
-requires a one-time manual step: build the branded template once in Canva's
-editor with named placeholder fields, reference its `template_id` in `.env`
-as `CANVA_BRAND_TEMPLATE_ID`, and register a Canva Connect app for
-`CANVA_CLIENT_ID`/`CANVA_CLIENT_SECRET` — Canva Connect's OAuth2/PKCE
-exchange is still a documented stub in `canva_client.py._access_token()`,
-left for whoever wires up a redirect-capable deployment. Until all three are
-set, `apply_branding()` passes the rough cut through unbranded rather than
-failing Stage 9 — branding is an enhancement on an already-complete video,
-not the deliverable itself.
+thirds, logo placeholder) and the **Export API** renders the result. Setup:
+build the branded template once in Canva's editor with named placeholder
+fields, reference its `template_id` in `.env` as `CANVA_BRAND_TEMPLATE_ID`,
+register a Canva Connect integration at canva.com/developers for
+`CANVA_CLIENT_ID`/`CANVA_CLIENT_SECRET`, then run `ystick canva-auth` once
+— a paste-back OAuth2/PKCE flow (`integrations/canva_oauth.py`; no local
+redirect listener, the human copies the redirected URL out of the browser's
+address bar) that mints a long-lived `CANVA_REFRESH_TOKEN`.
+`canva_client.py._access_token()` silently exchanges that refresh token for
+a fresh short-lived access token on every call — no further manual steps
+after the one-time setup. Until `CANVA_CLIENT_ID`/`CANVA_CLIENT_SECRET`/
+`CANVA_BRAND_TEMPLATE_ID` are all set, `apply_branding()` passes the rough
+cut through unbranded rather than failing Stage 9 — branding is an
+enhancement on an already-complete video, not the deliverable itself; once
+those three are set but `canva-auth` hasn't been run yet, it fails fast
+with that exact instruction instead of a generic auth error.
 
 ### Stage 9b — Caption burn-in
 Runs after branding, not as part of Stage 8, so captions land on the actual
