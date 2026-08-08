@@ -125,7 +125,7 @@ see the caption under the project title once a project is selected.
             {"#": i + 1, "Stage": STAGE_LABELS[s], "What happens": STAGE_DESCRIPTIONS[s]}
             for i, s in enumerate(STAGE_ORDER)
         ]
-        st.dataframe(rows, use_container_width=True, hide_index=True)
+        st.dataframe(rows, width='stretch', hide_index=True)
 
 
 def sidebar(orch: Orchestrator) -> str | None:
@@ -146,7 +146,7 @@ def sidebar(orch: Orchestrator) -> str | None:
         with st.sidebar.expander("💡 Starter ideas", expanded=False):
             st.caption("From the channel's content strategy — click one to use it below.")
             for i, topic in enumerate(starter_topics):
-                if st.button(topic, key=f"starter_{i}", use_container_width=True):
+                if st.button(topic, key=f"starter_{i}", width='stretch'):
                     st.session_state["new_idea"] = topic
                     st.session_state["_expand_new_project"] = True
                     st.rerun()
@@ -161,7 +161,7 @@ def sidebar(orch: Orchestrator) -> str | None:
             "Target length (minutes)", min_value=1, max_value=60, value=bp.target_video_length_minutes, key="new_minutes"
         )
         mock = st.checkbox("Mock mode (no API calls, free)", value=True, key="new_mock")
-        if st.button("Create project", type="primary", use_container_width=True):
+        if st.button("Create project", type="primary", width='stretch'):
             project_id = new_project_id(idea or bp.name)
             orch.init_project(project_id, idea, target_minutes=int(minutes), mock=mock)
             st.session_state["current_project"] = project_id
@@ -192,7 +192,7 @@ def advanced_panel(orch: Orchestrator, project_id: str) -> None:
             "Reset from stage", STAGE_ORDER, format_func=lambda s: STAGE_LABELS[s], key="reset_stage"
         )
         st.caption("Re-runs this stage and everything after it. Does not delete existing files.")
-        if st.button("Reset", use_container_width=True):
+        if st.button("Reset", width='stretch'):
             orch.force_from(project_id, stage)
             st.rerun()
 

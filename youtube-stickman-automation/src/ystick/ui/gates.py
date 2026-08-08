@@ -55,7 +55,7 @@ def render_topic_selection(orch: Orchestrator, project_id: str, project_dir: Pat
                         sc.metric(label, idea[key])
             with right:
                 st.metric("Score", idea["weighted_score"])
-                if st.button("Select", key=f"select_idea_{i}", type="primary", use_container_width=True):
+                if st.button("Select", key=f"select_idea_{i}", type="primary", width='stretch'):
                     orch.approve(project_id, "topic_selection", {"select": i})
                     st.rerun()
 
@@ -70,11 +70,11 @@ def render_script_review(orch: Orchestrator, project_id: str, project_dir: Path)
     edited = st.text_area("Narration script", value=text, height=420, label_visibility="collapsed")
 
     col1, col2 = st.columns(2)
-    if col1.button("💾 Save edits", use_container_width=True, disabled=edited == text):
+    if col1.button("💾 Save edits", width='stretch', disabled=edited == text):
         _save_script(script_dir, edited)
         st.success("Saved.")
         st.rerun()
-    if col2.button("✅ Approve & Continue", type="primary", use_container_width=True):
+    if col2.button("✅ Approve & Continue", type="primary", width='stretch'):
         if edited != text:
             _save_script(script_dir, edited)
         orch.approve(project_id, "script_review", {})
@@ -106,7 +106,7 @@ def render_storyboard_review(orch: Orchestrator, project_id: str, project_dir: P
         }
         for s in storyboard
     ]
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.dataframe(rows, width='stretch', hide_index=True)
 
     if st.button("✅ Approve & Continue", type="primary"):
         orch.approve(project_id, "storyboard_review", {})
@@ -236,7 +236,7 @@ def _preview_topic_discovery(project_dir: Path) -> None:
         {"Title": i["title"], "Score": i["weighted_score"], "Pitch": i.get("one_line_pitch", "")}
         for i in ideas
     ]
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.dataframe(rows, width='stretch', hide_index=True)
 
 
 def _preview_script_generation(project_dir: Path) -> None:
@@ -258,7 +258,7 @@ def _preview_timestamps(project_dir: Path) -> None:
         return
     transcript = read_json(path)
     st.caption(f"{len(transcript['words'])} words, {len(transcript['sentences'])} sentences")
-    st.dataframe(transcript["sentences"], use_container_width=True, hide_index=True)
+    st.dataframe(transcript["sentences"], width='stretch', hide_index=True)
 
 
 def _preview_scene_planning(project_dir: Path) -> None:
@@ -277,7 +277,7 @@ def _preview_scene_planning(project_dir: Path) -> None:
         }
         for s in storyboard
     ]
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.dataframe(rows, width='stretch', hide_index=True)
 
 
 def _preview_image_prompts(project_dir: Path) -> None:
@@ -303,7 +303,7 @@ def _preview_image_generation(project_dir: Path) -> None:
     for i, (scene_id, entry) in enumerate(sorted(manifest.items())):
         img_path = Path(entry["path"])
         if img_path.exists():
-            cols[i % 4].image(str(img_path), caption=scene_id, use_container_width=True)
+            cols[i % 4].image(str(img_path), caption=scene_id, width='stretch')
 
 
 def _preview_video_assembly(project_dir: Path) -> None:
@@ -349,7 +349,7 @@ def _preview_youtube_packaging(project_dir: Path) -> None:
 
     if packaging.get("chapters"):
         st.write("**Chapters**")
-        st.dataframe(packaging["chapters"], use_container_width=True, hide_index=True)
+        st.dataframe(packaging["chapters"], width='stretch', hide_index=True)
 
     thumbnail_prompts = packaging.get("thumbnail_prompts", [])
     if thumbnail_prompts:
