@@ -71,6 +71,12 @@ class Secrets(BaseSettings):
     image_gen_provider: str = "openai"
     image_gen_api_key: str = ""
     gemini_api_key: str = ""
+    # Google renames/deprecates these fairly often — if generation 404s with
+    # "model ... is not found", check https://ai.google.dev/gemini-api/docs/image-generation
+    # (or GET https://generativelanguage.googleapis.com/v1beta/models?key=YOUR_KEY
+    # for the exact current names) and override here rather than waiting on
+    # a code change.
+    gemini_image_model: str = "gemini-2.5-flash-image"
 
     canva_client_id: str = ""
     canva_client_secret: str = ""

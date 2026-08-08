@@ -31,10 +31,11 @@ from ystick.utils.http_errors import is_quota_exhausted
 OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations"
 OPENAI_IMAGE_EDITS_URL = "https://api.openai.com/v1/images/edits"
 
-# Google renames/replaces these periodically — check
-# https://ai.google.dev/gemini-api/docs/image-generation if this 404s.
-GEMINI_IMAGE_MODEL = "gemini-2.0-flash-exp-image-generation"
-GEMINI_GENERATE_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_IMAGE_MODEL}:generateContent"
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
+
+
+def gemini_generate_url(model: str) -> str:
+    return f"{GEMINI_API_BASE}/models/{model}:generateContent"
 
 _MIME_BY_SUFFIX = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 
@@ -119,9 +120,10 @@ class ImageGenClient:
             "contents": [{"parts": parts}],
             "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
         }
+        model = self.secrets.gemini_image_model
         try:
             resp = requests.post(
-                GEMINI_GENERATE_URL,
+                gemini_generate_url(model),
                 params={"key": self.secrets.gemini_api_key},
                 json=body,
                 timeout=180,
@@ -129,6 +131,18 @@ class ImageGenClient:
         except requests.RequestException as exc:
             raise RetryableError(f"Gemini request failed: {exc}") from exc
 
+        if resp.status_code == 404:
+            # Google renames/deprecates image-gen model IDs fairly often —
+            # this is near-certainly a stale GEMINI_IMAGE_MODEL, not a
+            # transient issue, so fail fast with the fix instead of
+            # retrying a request that will 404 every time.
+            raise FatalError(
+                f"Gemini model '{model}' not found/not supported for image generation "
+                f"(likely renamed or deprecated by Google). Fix: list your available "
+                f"models at https://generativelanguage.googleapis.com/v1beta/models?key=YOUR_KEY "
+                f"(or see https://ai.google.dev/gemini-api/docs/image-generation), then set "
+                f"GEMINI_IMAGE_MODEL=<current model id> in .env. Raw response: {resp.text[:500]}"
+            )
         if resp.status_code >= 500 or resp.status_code == 429:
             raise RetryableError(f"Gemini {resp.status_code}: {resp.text[:500]}")
         if resp.status_code >= 400:
