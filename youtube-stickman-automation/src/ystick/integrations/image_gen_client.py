@@ -39,6 +39,14 @@ GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 def gemini_generate_url(model: str) -> str:
     return f"{GEMINI_API_BASE}/models/{model}:generateContent"
 
+
+class _GeminiNoImageData(FatalError):
+    """Internal signal distinguishing "model answered with text, no image"
+    from other FatalErrors — lets _generate_gemini retry once without a
+    reference image before giving up for real. Never meant to escape this
+    module uncaught other than as the plain FatalError it subclasses."""
+
+
 _MIME_BY_SUFFIX = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 
 # 1x1 transparent PNG — used only as a mock placeholder so mock-mode output
@@ -112,8 +120,24 @@ class ImageGenClient:
         if not self.secrets.gemini_api_key:
             raise FatalError("GEMINI_API_KEY not set — get a free key at aistudio.google.com")
 
+        use_reference = bool(reference_image and reference_image.exists())
+        try:
+            return self._gemini_request(prompt, out_path, reference_image if use_reference else None)
+        except _GeminiNoImageData:
+            if not use_reference:
+                raise
+            # Gemini sometimes refuses to preserve a reference image's
+            # details and answers with a text-only apology instead of an
+            # image (confirmed in the wild: "wasn't able to maintain all
+            # the details from your previous request"). Losing style
+            # continuity for one scene is far better than blocking the
+            # whole stage over it, so retry once bare — plain generation
+            # from the prompt alone, with no consistency conditioning.
+            return self._gemini_request(prompt, out_path, None)
+
+    def _gemini_request(self, prompt: str, out_path: Path, reference_image: Path | None) -> Path:
         parts: list[dict] = [{"text": prompt}]
-        if reference_image and reference_image.exists():
+        if reference_image is not None:
             mime_type = _MIME_BY_SUFFIX.get(reference_image.suffix.lower(), "image/png")
             b64_ref = base64.b64encode(reference_image.read_bytes()).decode("ascii")
             parts.append({"inlineData": {"mimeType": mime_type, "data": b64_ref}})
@@ -186,4 +210,4 @@ class ImageGenClient:
                 out_path.write_bytes(base64.b64decode(inline["data"]))
                 return out_path
 
-        raise FatalError(f"Gemini response contained no image data: {str(data)[:500]}")
+        raise _GeminiNoImageData(f"Gemini response contained no image data: {str(data)[:500]}")

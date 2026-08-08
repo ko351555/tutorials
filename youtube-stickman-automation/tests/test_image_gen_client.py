@@ -103,6 +103,61 @@ def test_gemini_response_with_no_image_raises_fatal(tmp_path: Path, monkeypatch)
         client.generate("a stickman", tmp_path / "image.png")
 
 
+def test_gemini_retries_without_reference_when_model_refuses_consistency(tmp_path: Path, monkeypatch):
+    """Real production case: Gemini answers a reference-conditioned request
+    with a text-only apology ("wasn't able to maintain all the details
+    from your previous request") instead of an image. Losing style
+    continuity for one scene beats blocking the whole stage — the client
+    should retry once bare (no reference) and succeed, rather than
+    failing outright."""
+    calls = []
+    fake_image_bytes = b"\x89PNG\r\n\x1a\nFAKEIMAGEDATA"
+
+    def fake_post(url, params=None, json=None, timeout=None):
+        has_reference = len(json["contents"][0]["parts"]) > 1
+        calls.append(has_reference)
+        if has_reference:
+            return _FakeResponse(
+                200,
+                {"candidates": [{"content": {"parts": [{"text": "wasn't able to maintain all the details"}]}}]},
+            )
+        return _FakeResponse(
+            200,
+            {"candidates": [{"content": {"parts": [
+                {"inlineData": {"mimeType": "image/png", "data": base64.b64encode(fake_image_bytes).decode()}}
+            ]}}]},
+        )
+
+    monkeypatch.setattr(igc_module.requests, "post", fake_post)
+
+    reference = tmp_path / "reference.png"
+    reference.write_bytes(b"\x89PNG\r\n\x1a\nREFERENCE")
+    out_path = tmp_path / "scene_001" / "image.png"
+
+    client = ImageGenClient(Secrets(image_gen_provider="gemini", gemini_api_key="test-key"), mock=False)
+    result = client.generate("a stickman waving", out_path, reference_image=reference)
+
+    assert result == out_path
+    assert out_path.read_bytes() == fake_image_bytes
+    assert calls == [True, False]  # first attempt with reference, then a bare retry
+
+
+def test_gemini_no_reference_no_image_data_fails_immediately(tmp_path: Path, monkeypatch):
+    """No reference was ever used, so there's no bare fallback to try —
+    must fail on the first attempt, not loop."""
+    calls = []
+
+    def fake_post(url, params=None, json=None, timeout=None):
+        calls.append(1)
+        return _FakeResponse(200, {"candidates": [{"content": {"parts": [{"text": "no image for you"}]}}]})
+
+    monkeypatch.setattr(igc_module.requests, "post", fake_post)
+    client = ImageGenClient(Secrets(image_gen_provider="gemini", gemini_api_key="test-key"), mock=False)
+    with pytest.raises(FatalError, match="no image data"):
+        client.generate("a stickman", tmp_path / "image.png")
+    assert len(calls) == 1
+
+
 def test_gemini_image_model_is_configurable(tmp_path: Path, monkeypatch):
     """Real production failure: Gemini's default image-gen model ID 404s
     once Google renames/deprecates it. GEMINI_IMAGE_MODEL must actually

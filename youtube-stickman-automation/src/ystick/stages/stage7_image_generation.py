@@ -74,6 +74,7 @@ class ImageGenerationStage(Stage):
                 shutil.copyfile(source_path, dest_path)
                 manifest[scene_id] = {"path": str(dest_path), "prompt_hash": manifest[source_scene]["prompt_hash"]}
                 num_reused += 1
+                write_json(manifest_path, manifest)
                 continue
 
             prompt = entry["prompt"]
@@ -87,6 +88,7 @@ class ImageGenerationStage(Stage):
                 manifest[scene_id] = {"path": str(uploaded), "prompt_hash": phash}
                 previous_image_path = uploaded
                 num_uploaded += 1
+                write_json(manifest_path, manifest)
                 continue
 
             cached = manifest.get(scene_id)
@@ -99,6 +101,12 @@ class ImageGenerationStage(Stage):
             manifest[scene_id] = {"path": str(image_path), "prompt_hash": phash}
             previous_image_path = image_path
             num_generated += 1
+            # Written per-scene, not just once at the end: if a later scene
+            # fails (API error, quota, etc.) and the stage retries, already-
+            # generated scenes must be skippable via the cache-hit check
+            # above — otherwise a failure on scene 8 of 10 would silently
+            # re-spend credits regenerating scenes 1-7 too.
+            write_json(manifest_path, manifest)
 
         if missing:
             lines = [f"  - {out_dir / s / 'image.<png|jpg|jpeg|webp>'}" for s in missing]
@@ -107,5 +115,4 @@ class ImageGenerationStage(Stage):
                 f"(use the image_upload gate in the UI, or place files at):\n" + "\n".join(lines)
             )
 
-        write_json(manifest_path, manifest)
         return {"generated": num_generated, "cached": num_cached, "reused": num_reused, "uploaded": num_uploaded}
