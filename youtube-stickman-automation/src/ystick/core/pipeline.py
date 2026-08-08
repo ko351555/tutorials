@@ -66,3 +66,18 @@ STAGE_FOLDERS: dict[str, str] = {
     "canva_finishing": "09_final",
     "youtube_packaging": "10_packaging",
 }
+
+# Short human-readable labels — shared by the CLI and UI so stage naming
+# never drifts between the two.
+STAGE_LABELS: dict[str, str] = {
+    "topic_discovery": "Topic",
+    "script_generation": "Script",
+    "voice_generation": "Voice",
+    "timestamps": "Timestamps",
+    "scene_planning": "Storyboard",
+    "image_prompts": "Prompts",
+    "image_generation": "Images",
+    "video_assembly": "Assembly",
+    "canva_finishing": "Branding",
+    "youtube_packaging": "Packaging",
+}

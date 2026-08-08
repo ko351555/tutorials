@@ -8,8 +8,9 @@ from pathlib import Path
 import streamlit as st
 
 from ystick.core.orchestrator import Orchestrator
-from ystick.core.pipeline import STAGE_FOLDERS
+from ystick.core.pipeline import STAGE_FOLDERS, STAGE_LABELS, STAGE_ORDER
 from ystick.stages.stage7_image_generation import find_uploaded_image
+from ystick.state.models import DONE
 from ystick.ui.helpers import safe_audio, safe_video
 from ystick.utils.files import read_json, write_json
 
@@ -163,26 +164,125 @@ def render_final_review(orch: Orchestrator, project_id: str, project_dir: Path) 
         st.rerun()
 
 
-def render_results(project_dir: Path, mock: bool) -> None:
-    packaging_path = project_dir / STAGE_FOLDERS["youtube_packaging"] / "packaging.json"
-    if not packaging_path.exists():
-        return
-    packaging = read_json(packaging_path)
+# --- per-stage result previews -------------------------------------------
+# One function per stage, each rendering whatever that stage actually
+# produced. render_stage_results() below shows one of these per completed
+# stage, so every step's output is inspectable, not just the current gate
+# or a final summary.
 
-    st.subheader("📦 YouTube packaging")
-    st.text_input("Title", value=packaging.get("title", ""))
-    st.text_area("Description", value=packaging.get("description", ""), height=120)
+
+def _preview_topic_discovery(project_dir: Path) -> None:
+    path = project_dir / STAGE_FOLDERS["topic_discovery"] / "ideas.json"
+    if not path.exists():
+        st.caption("Not generated yet.")
+        return
+    ideas = read_json(path)
+    rows = [
+        {"Title": i["title"], "Score": i["weighted_score"], "Pitch": i.get("one_line_pitch", "")}
+        for i in ideas
+    ]
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+
+
+def _preview_script_generation(project_dir: Path) -> None:
+    path = project_dir / STAGE_FOLDERS["script_generation"] / "script.md"
+    if not path.exists():
+        st.caption("Not generated yet.")
+        return
+    st.code(path.read_text(), language="markdown")
+
+
+def _preview_voice_generation(project_dir: Path) -> None:
+    safe_audio(project_dir / STAGE_FOLDERS["voice_generation"] / "narration.mp3")
+
+
+def _preview_timestamps(project_dir: Path) -> None:
+    path = project_dir / STAGE_FOLDERS["timestamps"] / "transcript.json"
+    if not path.exists():
+        st.caption("Not generated yet.")
+        return
+    transcript = read_json(path)
+    st.caption(f"{len(transcript['words'])} words, {len(transcript['sentences'])} sentences")
+    st.dataframe(transcript["sentences"], use_container_width=True, hide_index=True)
+
+
+def _preview_scene_planning(project_dir: Path) -> None:
+    path = project_dir / STAGE_FOLDERS["scene_planning"] / "storyboard.json"
+    if not path.exists():
+        st.caption("Not generated yet.")
+        return
+    storyboard = read_json(path)
+    rows = [
+        {
+            "Scene": s["scene_id"],
+            "Start": f"{s['start_ms'] / 1000:.1f}s",
+            "Duration": f"{s['duration_ms'] / 1000:.1f}s",
+            "Holds previous image": "yes" if s["hold_previous_image"] else "",
+            "Narration": (s["narration_excerpt"][:100] + "…") if len(s["narration_excerpt"]) > 100 else s["narration_excerpt"],
+        }
+        for s in storyboard
+    ]
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+
+
+def _preview_image_prompts(project_dir: Path) -> None:
+    path = project_dir / STAGE_FOLDERS["image_prompts"] / "image_prompts.json"
+    if not path.exists():
+        st.caption("Not generated yet.")
+        return
+    for entry in read_json(path):
+        if "prompt" in entry:
+            st.markdown(f"**{entry['scene_id']}**")
+            st.code(entry["prompt"], language=None)
+        else:
+            st.caption(f"{entry['scene_id']}: reuses {entry['reuse_scene']}'s image")
+
+
+def _preview_image_generation(project_dir: Path) -> None:
+    path = project_dir / STAGE_FOLDERS["image_generation"] / "manifest.json"
+    if not path.exists():
+        st.caption("Not generated yet.")
+        return
+    manifest = read_json(path)
+    cols = st.columns(4)
+    for i, (scene_id, entry) in enumerate(sorted(manifest.items())):
+        img_path = Path(entry["path"])
+        if img_path.exists():
+            cols[i % 4].image(str(img_path), caption=scene_id, use_container_width=True)
+
+
+def _preview_video_assembly(project_dir: Path) -> None:
+    path = project_dir / STAGE_FOLDERS["video_assembly"] / "rough_cut.mp4"
+    st.caption(f"`{path}`")
+    safe_video(path, "Rough cut")
+
+
+def _preview_canva_finishing(project_dir: Path) -> None:
+    path = project_dir / STAGE_FOLDERS["canva_finishing"] / "branded_cut.mp4"
+    st.caption(f"`{path}`")
+    safe_video(path, "Branded cut")
+
+
+def _preview_youtube_packaging(project_dir: Path) -> None:
+    path = project_dir / STAGE_FOLDERS["youtube_packaging"] / "packaging.json"
+    if not path.exists():
+        st.caption("Not generated yet.")
+        return
+    packaging = read_json(path)
+
+    st.text_input("Title", value=packaging.get("title", ""), key="preview_title")
+    st.text_area("Description", value=packaging.get("description", ""), height=120, key="preview_description")
     st.write("**Tags:** " + ", ".join(packaging.get("tags", [])))
 
     col1, col2 = st.columns(2)
     with col1:
-        st.text_input("Thumbnail text", value=packaging.get("thumbnail_text", ""))
-        st.text_area("Thumbnail concept", value=packaging.get("thumbnail_concept", ""), height=80)
-        st.text_area("Pinned comment", value=packaging.get("pinned_comment", ""), height=80)
+        st.text_input("Thumbnail text", value=packaging.get("thumbnail_text", ""), key="preview_thumb_text")
+        st.text_area("Thumbnail concept", value=packaging.get("thumbnail_concept", ""), height=80, key="preview_thumb_concept")
+        st.text_area("Pinned comment", value=packaging.get("pinned_comment", ""), height=80, key="preview_pinned")
     with col2:
-        st.text_input("Shorts title", value=packaging.get("shorts_title", ""))
-        st.text_area("Shorts description", value=packaging.get("shorts_description", ""), height=80)
-        st.text_area("Community post", value=packaging.get("community_post", ""), height=80)
+        st.text_input("Shorts title", value=packaging.get("shorts_title", ""), key="preview_shorts_title")
+        st.text_area("Shorts description", value=packaging.get("shorts_description", ""), height=80, key="preview_shorts_desc")
+        st.text_area("Community post", value=packaging.get("community_post", ""), height=80, key="preview_community")
 
     if packaging.get("chapters"):
         st.write("**Chapters**")
@@ -194,55 +294,29 @@ def render_results(project_dir: Path, mock: bool) -> None:
     elif upload.get("video_id"):
         st.success(f"Draft uploaded to YouTube (private): video_id={upload['video_id']}")
 
-    branded_cut = project_dir / STAGE_FOLDERS["canva_finishing"] / "branded_cut.mp4"
-    safe_video(branded_cut, "Final video")
+
+STAGE_PREVIEWS = {
+    "topic_discovery": _preview_topic_discovery,
+    "script_generation": _preview_script_generation,
+    "voice_generation": _preview_voice_generation,
+    "timestamps": _preview_timestamps,
+    "scene_planning": _preview_scene_planning,
+    "image_prompts": _preview_image_prompts,
+    "image_generation": _preview_image_generation,
+    "video_assembly": _preview_video_assembly,
+    "canva_finishing": _preview_canva_finishing,
+    "youtube_packaging": _preview_youtube_packaging,
+}
 
 
-def render_asset_browser(project_dir: Path) -> None:
-    tabs = st.tabs(["Script", "Audio", "Images", "Storyboard", "Video", "Packaging"])
-
-    script_path = project_dir / STAGE_FOLDERS["script_generation"] / "script.md"
-    with tabs[0]:
-        st.code(script_path.read_text(), language="markdown") if script_path.exists() else st.caption("Not generated yet.")
-
-    with tabs[1]:
-        safe_audio(project_dir / STAGE_FOLDERS["voice_generation"] / "narration.mp3")
-
-    with tabs[2]:
-        manifest_path = project_dir / STAGE_FOLDERS["image_generation"] / "manifest.json"
-        if manifest_path.exists():
-            manifest = read_json(manifest_path)
-            cols = st.columns(4)
-            for i, (scene_id, entry) in enumerate(sorted(manifest.items())):
-                img_path = Path(entry["path"])
-                if img_path.exists():
-                    cols[i % 4].image(str(img_path), caption=scene_id, use_container_width=True)
-        else:
-            st.caption("Not generated yet.")
-
-    with tabs[3]:
-        storyboard_path = project_dir / STAGE_FOLDERS["scene_planning"] / "storyboard.json"
-        if storyboard_path.exists():
-            st.dataframe(read_json(storyboard_path), use_container_width=True, hide_index=True)
-        else:
-            st.caption("Not generated yet.")
-
-    with tabs[4]:
-        branded_cut = project_dir / STAGE_FOLDERS["canva_finishing"] / "branded_cut.mp4"
-        rough_cut = project_dir / STAGE_FOLDERS["video_assembly"] / "rough_cut.mp4"
-        if branded_cut.exists():
-            st.caption(f"`{branded_cut}` (branded)")
-            safe_video(branded_cut, "Branded cut")
-        elif rough_cut.exists():
-            st.caption(f"`{rough_cut}` (rough cut — branding not applied yet)")
-            safe_video(rough_cut, "Rough cut")
-        else:
-            st.caption("Not generated yet.")
-
-    with tabs[5]:
-        packaging_path = project_dir / STAGE_FOLDERS["youtube_packaging"] / "packaging.json"
-        if packaging_path.exists():
-            st.caption(f"`{packaging_path}`")
-            st.json(read_json(packaging_path))
-        else:
-            st.caption("Not generated yet.")
+def render_stage_results(project_dir: Path, status_by_stage: dict) -> None:
+    """One expander per completed stage with that stage's actual output.
+    Stages currently at an approval gate are skipped here — their active
+    gate screen above already shows the full interactive detail."""
+    completed = [s for s in STAGE_ORDER if status_by_stage[s].status == DONE]
+    if not completed:
+        return
+    st.subheader("📋 Results so far")
+    for stage_name in completed:
+        with st.expander(STAGE_LABELS[stage_name], expanded=(stage_name == completed[-1])):
+            STAGE_PREVIEWS[stage_name](project_dir)

@@ -10,7 +10,7 @@ from __future__ import annotations
 import streamlit as st
 
 from ystick.core.orchestrator import GATE_AFTER_STAGE, STAGE_TO_GATE, Orchestrator
-from ystick.core.pipeline import STAGE_ORDER
+from ystick.core.pipeline import STAGE_LABELS, STAGE_ORDER
 from ystick.state.models import AWAITING_APPROVAL, DONE, FAILED
 from ystick.ui import gates
 from ystick.ui.helpers import tail_log
@@ -18,18 +18,6 @@ from ystick.utils.ids import new_project_id
 
 st.set_page_config(page_title="Stickman YouTube Automation", page_icon="🎬", layout="wide")
 
-STAGE_LABELS = {
-    "topic_discovery": "Topic",
-    "script_generation": "Script",
-    "voice_generation": "Voice",
-    "timestamps": "Timestamps",
-    "scene_planning": "Storyboard",
-    "image_prompts": "Prompts",
-    "image_generation": "Images",
-    "video_assembly": "Assembly",
-    "canva_finishing": "Branding",
-    "youtube_packaging": "Packaging",
-}
 STATUS_ICON = {"pending": "⚪", "running": "🔵", "awaiting_approval": "⏳", "done": "✅", "failed": "❌"}
 GATE_RENDERERS = {
     "topic_selection": gates.render_topic_selection,
@@ -226,14 +214,13 @@ def main() -> None:
         GATE_RENDERERS[detail](orch, project_id, project_dir)
     elif all(s.status == DONE for s in states):
         st.success("Pipeline complete!")
-        gates.render_results(project_dir, meta["mock"])
     else:
         st.info("Ready to run." + (" (mock mode)" if meta["mock"] else ""))
         if st.button("▶️ Run pipeline", type="primary"):
             run_with_progress(orch, project_id)
 
-    with st.expander("📁 Project assets"):
-        gates.render_asset_browser(project_dir)
+    st.divider()
+    gates.render_stage_results(project_dir, status_by_stage)
 
     with st.expander("🪵 Logs"):
         st.code(tail_log(project_id), language="json")
