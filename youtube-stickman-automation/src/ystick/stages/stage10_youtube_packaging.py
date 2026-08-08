@@ -5,8 +5,9 @@ from ystick.core.pipeline import STAGE_FOLDERS, ProjectContext, Stage
 from ystick.integrations.youtube_client import YouTubeClient
 from ystick.utils.files import parse_json_loose, read_json, write_json
 
-SYSTEM_PROMPT = """You are a YouTube growth strategist. Respond with ONLY a
-JSON object, no prose."""
+SYSTEM_PROMPT = """You are a YouTube growth strategist and thumbnail
+click-through-rate (CTR) specialist. Respond with ONLY a JSON object, no
+prose."""
 
 PROMPT_TEMPLATE = """Channel: {channel_name} — {tagline}
 Business inquiries: {business_email}
@@ -30,9 +31,18 @@ Generate a JSON object with keys:
   (channel topic) and specific (video subject) search terms
 - thumbnail_text: <=5 words, the on-thumbnail caption
 - thumbnail_prompts: array of exactly 5 complete, ready-to-paste
-  image-generation prompts (for ChatGPT/DALL-E/Gemini), each a distinct
-  thumbnail concept for this video, each following the visual blueprint's
-  style/character/palette so it matches the video
+  image-generation prompts (for ChatGPT/DALL-E/Gemini) for the 5 HIGHEST-CTR
+  thumbnail concepts for this video. Each must apply proven high-CTR
+  thumbnail principles — pick a DIFFERENT angle per prompt, e.g.:
+  1. exaggerated stickman facial expression/reaction (shock, curiosity)
+  2. a visual curiosity gap (something partially hidden/obscured, a big "?")
+  3. bold high-contrast color blocking with the subject isolated from the background
+  4. a before/after or comparison split-frame
+  5. a big bold number or symbol tied to the video's hook
+  Each prompt must also specify: 3-4 words max of bold on-image text,
+  high color contrast, subject large and off-center (rule of thirds), no
+  clutter — and must follow the visual blueprint's style/character/palette
+  so it still matches the video.
 - chapters: array of {{"time","label"}}
 - pinned_comment, community_post, shorts_title, shorts_description
 """
@@ -72,8 +82,18 @@ class YoutubePackagingStage(Stage):
             })
         if not packaging.get("thumbnail_prompts"):
             fallback_concept = packaging.get("thumbnail_concept") or script["chosen_idea"]["title"]
+            ctr_angles = [
+                "exaggerated shocked/curious facial expression, reacting to the topic",
+                "a visual curiosity gap — key detail partially hidden or covered by a big \"?\"",
+                "bold high-contrast color blocking, subject isolated from a plain background",
+                "a before/after or comparison split-frame",
+                "a big bold number or symbol tied to the video's hook",
+            ]
             packaging["thumbnail_prompts"] = [
-                f"{fallback_concept} — variation {i + 1}. {visual_blueprint[:300]}" for i in range(5)
+                f"High-CTR YouTube thumbnail for \"{fallback_concept}\": {angle}. Bold on-image text "
+                f"(3-4 words max), high contrast, subject large and off-center, no clutter. "
+                f"Match this channel's art style: {visual_blueprint[:300]}"
+                for angle in ctr_angles
             ]
 
         cfg = ctx.settings.stages.youtube_packaging

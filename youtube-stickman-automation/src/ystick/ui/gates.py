@@ -353,7 +353,7 @@ def _preview_youtube_packaging(project_dir: Path) -> None:
 
     thumbnail_prompts = packaging.get("thumbnail_prompts", [])
     if thumbnail_prompts:
-        st.write("**5 thumbnail prompts** — paste any of these into ChatGPT/DALL-E/Gemini to generate a thumbnail:")
+        st.write("**5 high-CTR thumbnail prompts** — paste any of these into ChatGPT/DALL-E/Gemini to generate a thumbnail:")
         for i, thumb_prompt in enumerate(thumbnail_prompts, start=1):
             st.caption(f"Option {i}")
             st.code(thumb_prompt, language=None)
