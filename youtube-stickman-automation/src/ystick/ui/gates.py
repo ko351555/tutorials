@@ -333,12 +333,14 @@ def _preview_youtube_packaging(project_dir: Path) -> None:
 
     st.text_input("Title", value=packaging.get("title", ""), key="preview_title")
     st.text_area("Description", value=packaging.get("description", ""), height=120, key="preview_description")
-    st.write("**Tags:** " + ", ".join(packaging.get("tags", [])))
+
+    st.write("**Tags** — copy this straight into YouTube Studio's tags field:")
+    tags = packaging.get("tags", [])
+    st.code(", ".join(tags) if tags else "(none generated)", language=None)
 
     col1, col2 = st.columns(2)
     with col1:
         st.text_input("Thumbnail text", value=packaging.get("thumbnail_text", ""), key="preview_thumb_text")
-        st.text_area("Thumbnail concept", value=packaging.get("thumbnail_concept", ""), height=80, key="preview_thumb_concept")
         st.text_area("Pinned comment", value=packaging.get("pinned_comment", ""), height=80, key="preview_pinned")
     with col2:
         st.text_input("Shorts title", value=packaging.get("shorts_title", ""), key="preview_shorts_title")
@@ -348,6 +350,13 @@ def _preview_youtube_packaging(project_dir: Path) -> None:
     if packaging.get("chapters"):
         st.write("**Chapters**")
         st.dataframe(packaging["chapters"], use_container_width=True, hide_index=True)
+
+    thumbnail_prompts = packaging.get("thumbnail_prompts", [])
+    if thumbnail_prompts:
+        st.write("**5 thumbnail prompts** — paste any of these into ChatGPT/DALL-E/Gemini to generate a thumbnail:")
+        for i, thumb_prompt in enumerate(thumbnail_prompts, start=1):
+            st.caption(f"Option {i}")
+            st.code(thumb_prompt, language=None)
 
     upload = packaging.get("youtube_upload", {})
     if upload.get("status") == "mock":

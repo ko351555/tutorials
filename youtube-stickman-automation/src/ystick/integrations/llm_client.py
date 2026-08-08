@@ -133,7 +133,7 @@ class LLMClient:
                     "description": "Mock SEO description.",
                     "tags": ["mock", "placeholder"],
                     "thumbnail_text": "MOCK",
-                    "thumbnail_concept": "Placeholder thumbnail concept.",
+                    "thumbnail_prompts": [f"[MOCK THUMBNAIL PROMPT {variant}] variation {i + 1}" for i in range(5)],
                     "chapters": [{"time": "00:00", "label": "Intro"}],
                     "pinned_comment": "Mock pinned comment.",
                     "community_post": "Mock community post.",
