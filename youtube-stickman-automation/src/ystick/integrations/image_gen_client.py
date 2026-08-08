@@ -151,13 +151,23 @@ class ImageGenClient:
             # free-tier quota at all (image-output models commonly require
             # billing enabled, unlike Gemini's free text-only tier), so
             # every retry will 429 identically. Fail fast with the fix.
+            #
+            # Confirmed in the wild: having a funded Cloud Billing account
+            # is NOT sufficient by itself — aistudio.google.com/apikey also
+            # has a separate per-project "Free tier" -> "Paid tier" toggle
+            # that must be switched explicitly, and it can take a while to
+            # propagate. A funded billing account with the key still on
+            # "Free tier" reproduces this exact zero-quota 429.
             raise FatalError(
                 f"Gemini model '{model}' has zero free-tier quota for your project — "
                 f"image generation on Gemini typically requires billing enabled (unlike "
-                f"Gemini's free text-only tier). Enable billing at "
-                f"https://ai.google.dev/gemini-api/docs/rate-limits, or switch "
-                f"IMAGE_GEN_PROVIDER to manual (no cost) or openai (separate billing) "
-                f"in .env. Raw response: {resp.text[:500]}"
+                f"Gemini's free text-only tier). A funded Cloud Billing account alone is "
+                f"NOT enough: go to https://aistudio.google.com/apikey, find this key's "
+                f"project, and confirm it's switched to 'Paid tier' (not just that billing "
+                f"is attached) — this is a separate toggle. If it's already on Paid tier, "
+                f"the switch can take time to propagate; otherwise switch IMAGE_GEN_PROVIDER "
+                f"to manual (no cost) or openai (separate billing) in .env. "
+                f"Raw response: {resp.text[:500]}"
             )
         if resp.status_code >= 500 or resp.status_code == 429:
             raise RetryableError(f"Gemini {resp.status_code}: {resp.text[:500]}")
