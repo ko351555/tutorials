@@ -139,3 +139,52 @@ def test_gemini_404_gives_actionable_model_not_found_message(tmp_path: Path, mon
     with pytest.raises(FatalError, match="GEMINI_IMAGE_MODEL") as exc_info:
         client.generate("a stickman", tmp_path / "image.png")
     assert "stale-model" in str(exc_info.value)
+
+
+class _RawTextResponse:
+    """Mimics requests.Response closely enough for the 429 zero-quota
+    check, which greps the raw response text rather than parsed JSON."""
+
+    def __init__(self, status_code: int, text: str):
+        self.status_code = status_code
+        self.text = text
+
+
+def test_gemini_zero_quota_429_is_fatal_not_retried(tmp_path: Path, monkeypatch):
+    """Real production error: a 429 with 'limit: 0' means this model has
+    zero free-tier quota at all — image generation commonly requires
+    billing enabled, unlike Gemini's free text tier. Every retry would
+    429 identically, so this must raise FatalError (fail fast with the
+    fix), not RetryableError (burn 5 attempts on a request that can never
+    succeed)."""
+    real_error_text = (
+        '{"error": {"code": 429, "message": "You exceeded your current quota... '
+        "* Quota exceeded for metric: generativelanguage.googleapis.com/"
+        "generate_content_free_tier_input_token_count, limit: 0, model: "
+        'gemini-2.5-flash-preview-image", "status": "RESOURCE_EXHAUSTED"}}'
+    )
+
+    def fake_post(url, params=None, json=None, timeout=None):
+        return _RawTextResponse(429, real_error_text)
+
+    monkeypatch.setattr(igc_module.requests, "post", fake_post)
+    client = ImageGenClient(
+        Secrets(image_gen_provider="gemini", gemini_api_key="test-key", gemini_image_model="gemini-2.5-flash-preview-image"),
+        mock=False,
+    )
+    with pytest.raises(FatalError, match="billing"):
+        client.generate("a stickman", tmp_path / "image.png")
+
+
+def test_gemini_ordinary_rate_limit_429_is_still_retryable(tmp_path: Path, monkeypatch):
+    """A transient per-minute rate limit (nonzero limit) is worth
+    retrying — only the zero-quota case is fatal."""
+    from ystick.core.exceptions import RetryableError
+
+    def fake_post(url, params=None, json=None, timeout=None):
+        return _RawTextResponse(429, '{"error": {"message": "Quota exceeded, limit: 15 requests per minute"}}')
+
+    monkeypatch.setattr(igc_module.requests, "post", fake_post)
+    client = ImageGenClient(Secrets(image_gen_provider="gemini", gemini_api_key="test-key"), mock=False)
+    with pytest.raises(RetryableError):
+        client.generate("a stickman", tmp_path / "image.png")

@@ -5,12 +5,14 @@ Two API providers (plus "manual", handled entirely in
 stages/stage7_image_generation.py, which never touches this client):
 - openai (default): OpenAI Images API. Needs its own billing, separate
   from a ChatGPT Pro chat subscription.
-- gemini: Google's Gemini API (get a free key at aistudio.google.com —
-  genuinely free-tier, no billing setup required to start). Gemini's
+- gemini: Google's Gemini API (get a key at aistudio.google.com). Gemini's
   multimodal `generateContent` endpoint doubles as an image generator when
   given an image-capable model, and accepts a reference image as another
   input part for the same consistency-locking purpose as OpenAI's edits
-  endpoint.
+  endpoint. Gemini's free tier covers text generation generously, but
+  image-output models have been observed with a hard zero free-tier quota
+  (confirmed live: 429 "limit: 0") — in practice this needs billing
+  enabled on the Google Cloud project behind the API key, same as OpenAI.
 
 Google Flow and Canva's Magic Media are UI-only (see docs/ARCHITECTURE.md
 §6) so they aren't wired in here at all — Flow is built on the same
@@ -142,6 +144,20 @@ class ImageGenClient:
                 f"models at https://generativelanguage.googleapis.com/v1beta/models?key=YOUR_KEY "
                 f"(or see https://ai.google.dev/gemini-api/docs/image-generation), then set "
                 f"GEMINI_IMAGE_MODEL=<current model id> in .env. Raw response: {resp.text[:500]}"
+            )
+        if resp.status_code == 429 and "limit: 0" in resp.text:
+            # A per-minute/per-day rate limit is transient and worth
+            # retrying — "limit: 0" is not. It means this model has zero
+            # free-tier quota at all (image-output models commonly require
+            # billing enabled, unlike Gemini's free text-only tier), so
+            # every retry will 429 identically. Fail fast with the fix.
+            raise FatalError(
+                f"Gemini model '{model}' has zero free-tier quota for your project — "
+                f"image generation on Gemini typically requires billing enabled (unlike "
+                f"Gemini's free text-only tier). Enable billing at "
+                f"https://ai.google.dev/gemini-api/docs/rate-limits, or switch "
+                f"IMAGE_GEN_PROVIDER to manual (no cost) or openai (separate billing) "
+                f"in .env. Raw response: {resp.text[:500]}"
             )
         if resp.status_code >= 500 or resp.status_code == 429:
             raise RetryableError(f"Gemini {resp.status_code}: {resp.text[:500]}")

@@ -375,11 +375,14 @@ reference input) so scene N+1 stays visually continuous with scene N. Two
 API providers are wired in:
 - **`IMAGE_GEN_PROVIDER=openai`** (default) — OpenAI Images API. Needs its
   own billing, separate from a ChatGPT Pro chat subscription.
-- **`IMAGE_GEN_PROVIDER=gemini`** — Google's Gemini API, genuinely
-  free-tier to start (key from aistudio.google.com, no billing setup
-  required). This is the same Imagen model family behind Google Flow —
-  Flow itself is browser-only with no API, but the model powering it is
-  reachable this way instead.
+- **`IMAGE_GEN_PROVIDER=gemini`** — Google's Gemini API (key from
+  aistudio.google.com). This is the same Imagen model family behind
+  Google Flow — Flow itself is browser-only with no API, but the model
+  powering it is reachable this way instead. Confirmed live: image-output
+  models carry a hard zero free-tier quota (429 "limit: 0") — billing
+  needs to be enabled on the Google Cloud project behind the key, same as
+  `openai`. Gemini's generous free tier is real for text generation, just
+  not for image output.
 
 Google Flow and Canva's Magic Media stay UI-only, creative-only options —
 neither exposes a scriptable API for image generation today.
