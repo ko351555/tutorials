@@ -40,6 +40,40 @@ def test_run_ffmpeg_success_does_not_raise(monkeypatch):
     run_ffmpeg(["ffmpeg", "-version"])
 
 
+def test_build_video_subtitles_filter_uses_named_quoted_filename(tmp_path: Path, monkeypatch):
+    """Regression test for a real production failure: ffmpeg's filter-option
+    parser rejects a bare `subtitles=/some/path.srt` value when the path has
+    no colons (it never finds a ':' to split on, so the positional shorthand
+    mapping to `filename` never kicks in, and it errors "No option name
+    near ..."). The fix names the option and single-quotes the value; this
+    locks that exact -vf shape in place."""
+    monkeypatch.setattr(va_module, "_ffmpeg_available", lambda: True)
+
+    captured_cmds = []
+
+    def fake_run_ffmpeg(cmd):
+        captured_cmds.append(cmd)
+        # Each ffmpeg call is expected to produce the file the next step reads.
+        Path(cmd[-1]).parent.mkdir(parents=True, exist_ok=True)
+        Path(cmd[-1]).write_bytes(b"fake")
+
+    monkeypatch.setattr(va_module, "run_ffmpeg", fake_run_ffmpeg)
+
+    scenes = [{"scene_id": "scene_001", "image_path": tmp_path / "img.png", "duration_ms": 1000}]
+    narration = tmp_path / "narration.mp3"
+    narration.write_bytes(b"fake")
+    srt_path = tmp_path / "narration.srt"
+    srt_path.write_text("1\n00:00:00,000 --> 00:00:01,000\nhello\n")
+    out_path = tmp_path / "out" / "final.mp4"
+
+    va_module.build_video(scenes, narration, srt_path, out_path, mock=False)
+
+    final_cmd = captured_cmds[-1]
+    vf_index = final_cmd.index("-vf")
+    vf_value = final_cmd[vf_index + 1]
+    assert vf_value == f"subtitles=filename='{srt_path}'"
+
+
 def test_build_video_falls_back_to_mock_placeholder_without_ffmpeg(tmp_path: Path, monkeypatch):
     """When ffmpeg isn't on PATH, build_video degrades to a placeholder file
     instead of raising — this is the mock/CI-friendly fallback, distinct

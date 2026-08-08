@@ -116,12 +116,19 @@ def build_video(
 
     vf_final = None
     if subtitles and srt_path.exists():
-        # ffmpeg's filtergraph parser treats ':' as an argument separator,
-        # so a literal colon in the path (only ever the drive letter on
-        # Windows, e.g. C:\...) has to be escaped or it truncates the path
-        # right there and fails with "No such file or directory".
-        escaped_srt = str(srt_path).replace("\\", "\\\\").replace(":", "\\:")
-        vf_final = f"subtitles={escaped_srt}"
+        # ffmpeg's filter-option parser splits the value on ':' to look for
+        # further key=value pairs; a bare path with no colons never trips
+        # that split, so the positional/shorthand mapping to `filename`
+        # doesn't kick in either and the whole thing is rejected with
+        # "No option name near ...". Naming the option explicitly and
+        # single-quoting the value sidesteps that as well as the classic
+        # Windows-drive-letter colon issue (C:\...) in one move; a literal
+        # single quote or backslash inside the path is escaped so the
+        # quoting itself can't be broken out of.
+        escaped_srt = (
+            str(srt_path).replace("\\", "\\\\").replace(":", "\\:").replace("'", "'\\''")
+        )
+        vf_final = f"subtitles=filename='{escaped_srt}'"
 
     cmd = ["ffmpeg", "-y", "-i", str(silent_video), "-i", str(narration_path)]
     if vf_final:
