@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
 
 from ystick.core.pipeline import STAGE_FOLDERS, ProjectContext, Stage
 from ystick.integrations.elevenlabs_client import ElevenLabsClient
+from ystick.integrations.video_assembly import run_ffmpeg
 from ystick.utils.files import read_json
 
 
@@ -29,10 +29,7 @@ def _concat_audio(paths: list[Path], out_path: Path) -> None:
         return
     list_file = out_path.parent / "audio_concat_list.txt"
     list_file.write_text("\n".join(f"file '{p.resolve()}'" for p in paths))
-    subprocess.run(
-        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file), "-c", "copy", str(out_path)],
-        check=True, capture_output=True,
-    )
+    run_ffmpeg(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file), "-c", "copy", str(out_path)])
 
 
 class VoiceGenerationStage(Stage):
