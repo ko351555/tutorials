@@ -14,9 +14,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import requests
+import structlog
 
 from ystick.config import Secrets
 from ystick.core.exceptions import FatalError, RetryableError
+
+log = structlog.get_logger()
 
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
@@ -27,9 +30,15 @@ class YouTubeClient:
         self.secrets = secrets
         self.mock = mock
 
+    def _configured(self) -> bool:
+        creds = self.secrets
+        return bool(
+            creds.youtube_oauth_client_id and creds.youtube_oauth_client_secret and creds.youtube_oauth_refresh_token
+        )
+
     def _access_token(self) -> str:
         creds = self.secrets
-        if not all([creds.youtube_oauth_client_id, creds.youtube_oauth_client_secret, creds.youtube_oauth_refresh_token]):
+        if not self._configured():
             raise FatalError("YOUTUBE_OAUTH_* not fully set in .env")
         try:
             resp = requests.post(
@@ -53,6 +62,21 @@ class YouTubeClient:
         description)}. Returns {"video_id": str} or a mock stand-in."""
         if self.mock:
             return {"video_id": "MOCK_VIDEO_ID", "status": "mock"}
+
+        if not self._configured():
+            # A YouTube Data API upload needs a registered OAuth app plus a
+            # one-time consent flow to mint a refresh token — a bigger lift
+            # than pasting an API key, and most first runs won't have it
+            # yet. The drafted title/description/tags/chapters are the
+            # actual deliverable here; auto-uploading is a bonus on top, so
+            # skip it instead of failing the whole pipeline over it.
+            log.warning(
+                "packaging.youtube_upload_not_configured",
+                detail="YOUTUBE_OAUTH_CLIENT_ID/CLIENT_SECRET/REFRESH_TOKEN not fully "
+                "set — skipping the YouTube draft upload. The video and metadata are "
+                "still ready in the project folder; see .env.example for OAuth setup.",
+            )
+            return {"video_id": None, "status": "skipped_not_configured"}
 
         token = self._access_token()
         body = {
