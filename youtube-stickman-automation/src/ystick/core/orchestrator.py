@@ -153,6 +153,12 @@ class Orchestrator:
         `seed_idea`/`mock` only need to be passed at creation time (they're
         persisted by `init_project`) — omit them on resume calls and the
         stored values are used."""
+        # Backfills rows for any stage STAGE_ORDER has gained since this
+        # project was created (ensure_project's INSERT OR IGNORE is a no-op
+        # for stages that already have a row) — otherwise a project created
+        # before a new stage existed has no row for it at all, and every
+        # lookup keyed by stage name breaks.
+        self.store.ensure_project(project_id, STAGE_ORDER)
         ctx = self._build_context(project_id, seed_idea, mock, log)
         retry_cfg = self.settings.retry
 
@@ -235,6 +241,10 @@ class Orchestrator:
         return last["status"]
 
     def status(self, project_id: str):
+        # Same backfill as iter_run() — the UI calls status() on every
+        # render, before any run/approve action, so a pre-existing project
+        # needs its missing rows filled in here too, not just on resume.
+        self.store.ensure_project(project_id, STAGE_ORDER)
         return self.store.list_stage_states(project_id, STAGE_ORDER)
 
     def approve(self, project_id: str, gate: str, decision: dict) -> None:
