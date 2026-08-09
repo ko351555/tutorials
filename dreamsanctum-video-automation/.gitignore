@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+
+# OAuth credentials and cached tokens — never commit, both grant upload access to the channel
+client_secrets.json
+token.json
+
+# Local batch config (contains your real file paths, copy from batch_config.example.yaml)
+batch_config.yaml
+
+# Working files — raw downloads, rendered output
+raw/
+output/
+*.mp4
+*.mp3
+!sample_content/**

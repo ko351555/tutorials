@@ -1,0 +1,44 @@
+# Copy this file to batch_config.yaml and fill in your real paths.
+# Matches your usual workflow of running a batch of ~10 videos from one
+# content file. batch_run.py processes every entry under `videos:`,
+# continuing past failures so one bad clip doesn't stop the rest of the batch.
+
+defaults:
+  content_file: sample_content/dream_sanctum_videos_11_15.md
+  output_dir: output
+  hours: 8                 # 5 or 8, matches what the content file calls for
+  reencode: false           # true = smaller file via re-encode, false = fast lossless stream-copy loop
+  video_bitrate: 2500k      # only used when reencode: true
+  upload: true
+  privacy: private          # YouTube requires "private" for scheduled uploads; flips to public at publish time
+  category_id: "10"         # 10 = Music
+
+  # Optional: auto-stagger scheduled publish times across the batch instead
+  # of setting publish_at on every video by hand. Leave out entirely to
+  # upload everything as an immediate private/unlisted/public upload.
+  schedule:
+    start: "2026-08-15T09:00:00Z"   # RFC3339, UTC
+    interval_hours: 24              # each next video publishes this many hours later
+
+videos:
+  - video_number: 11
+    clip: raw/video_11_clip.mp4
+    audio: raw/video_11_track.mp3
+    thumbnail: raw/video_11_thumb.jpg   # optional
+
+  - video_number: 12
+    clip: raw/video_12_clip.mp4
+    audio: raw/video_12_track.mp3
+
+  - video_number: 13
+    clip: raw/video_13_clip.mp4
+    audio: raw/video_13_track.mp3
+
+  - video_number: 14
+    clip: raw/video_14_clip.mp4
+    audio: raw/video_14_track.mp3
+
+  - video_number: 15
+    clip: raw/video_15_clip.mp4
+    audio: raw/video_15_track.mp3
+    hours: 5   # per-video override of the default 8
