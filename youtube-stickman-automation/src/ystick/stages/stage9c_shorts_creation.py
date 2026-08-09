@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ystick.core.exceptions import FatalError
 from ystick.core.pipeline import STAGE_FOLDERS, ProjectContext, Stage
+from ystick.integrations.canva_client import CanvaClient
 from ystick.integrations.video_assembly import build_video, trim_audio, write_srt
 from ystick.utils.files import parse_json_loose, read_json, write_json
 
@@ -144,18 +145,29 @@ class ShortsCreationStage(Stage):
         srt_path = write_srt(_slice_sentences(transcript["sentences"], start_ms, end_ms), out_dir / "narration_short.srt")
         scenes = _slice_scenes(storyboard, manifest, start_ms, end_ms)
 
-        out_path = out_dir / "shorts_cut.mp4"
+        raw_path = out_dir / "shorts_raw.mp4"
         build_video(
             scenes,
             trimmed_narration,
             srt_path,
-            out_path,
+            raw_path,
             fps=cfg.fps,
             resolution="1080x1920",
             ken_burns=cfg.ken_burns,
             subtitles=True,
             mock=ctx.mock,
         )
+
+        # Separate vertical (9:16) Brand Template from the long-form one —
+        # Canva templates render at whatever canvas size they were built
+        # with, so the 16:9 template can't be reused here. Gracefully
+        # skips to an unbranded pass-through if not configured, same as
+        # Stage 9 for the long-form video.
+        out_path = out_dir / "shorts_cut.mp4"
+        fields = {"title": script["chosen_idea"]["title"], "channel_name": ctx.extra["blueprint"].name}
+        client = CanvaClient(ctx.secrets, mock=ctx.mock)
+        client.apply_branding(raw_path, out_path, fields, template_id=ctx.secrets.canva_shorts_brand_template_id)
+
         return {
             "start_ms": start_ms,
             "end_ms": end_ms,

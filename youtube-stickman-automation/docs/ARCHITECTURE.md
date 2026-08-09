@@ -82,11 +82,19 @@ pick is invalid or off-brief), then that window's audio is trimmed
 overlapping storyboard scenes are sliced and re-timed relative to the new
 start, and its subtitle lines are re-windowed the same way. Reassembled
 with the same `build_video()` Stage 8 uses, just `resolution="1080x1920"`
-instead of `"1920x1080"` — no shorts-specific FFmpeg path needed. Stage 10
-uploads it as a second private draft (using `packaging.json`'s
-`shorts_title`/`shorts_description`, already generated but previously
-unused) when `stages.youtube_packaging.generate_shorts_variant` is on.
-Toggle off entirely via `stages.shorts_creation.enabled: false`.
+instead of `"1920x1080"` — no shorts-specific FFmpeg path needed. Optionally
+Canva-branded the same way Stage 9 brands the long-form video —
+`CanvaClient.apply_branding()` was generalized to take `template_id`
+explicitly rather than reading a single hardcoded secret, since Canva
+renders a Brand Template at whatever canvas size it was built with; the
+16:9 long-form template can't be reused vertically, so Shorts branding
+needs its own template at 1080x1920 (`CANVA_SHORTS_BRAND_TEMPLATE_ID`).
+Ships unbranded (raw vertical clip + captions) if that's unset — same
+graceful-skip as Stage 9. Stage 10 uploads it as a second private draft
+(using `packaging.json`'s `shorts_title`/`shorts_description`, already
+generated but previously unused) when
+`stages.youtube_packaging.generate_shorts_variant` is on. Toggle Shorts off
+entirely via `stages.shorts_creation.enabled: false`.
 
 Design principles:
 

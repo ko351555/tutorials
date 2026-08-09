@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from ystick.config import Secrets, load_settings
+from ystick.config import AttrDict, Secrets, load_settings
 from ystick.core.pipeline import STAGE_FOLDERS, ProjectContext
 from ystick.stages.stage9c_shorts_creation import (
     ShortsCreationStage,
@@ -99,7 +99,10 @@ def test_slice_sentences_shifts_timestamps_relative_to_window_start():
 # -- full stage, mock mode -----------------------------------------------------
 
 def _make_ctx(project_dir: Path) -> ProjectContext:
-    write_json(project_dir / STAGE_FOLDERS["script_generation"] / "script.json", {"text": "A. B. C. D."})
+    write_json(
+        project_dir / STAGE_FOLDERS["script_generation"] / "script.json",
+        {"text": "A. B. C. D.", "chosen_idea": {"title": "Test Video Title"}},
+    )
     write_json(
         project_dir / STAGE_FOLDERS["scene_planning"] / "storyboard.json",
         [
@@ -133,7 +136,10 @@ def _make_ctx(project_dir: Path) -> ProjectContext:
         settings=settings,
         secrets=Secrets(),
         mock=True,
-        extra={"llm": _StubLLMClient({"start_ms": 0, "end_ms": 8000, "reason": "whole thing"})},
+        extra={
+            "llm": _StubLLMClient({"start_ms": 0, "end_ms": 8000, "reason": "whole thing"}),
+            "blueprint": AttrDict({"name": "Test Channel"}),
+        },
     )
 
 

@@ -81,6 +81,11 @@ class Secrets(BaseSettings):
     canva_client_id: str = ""
     canva_client_secret: str = ""
     canva_brand_template_id: str = ""
+    # A SEPARATE Brand Template built at 1080x1920 (9:16) in Canva's editor
+    # — Canva templates aren't dimension-agnostic, so the 16:9 template
+    # above can't be reused for Shorts. Optional: Shorts ship unbranded if
+    # this isn't set, same graceful-skip as the long-form template.
+    canva_shorts_brand_template_id: str = ""
     # Obtained via `ystick canva-auth` (one-time interactive OAuth2/PKCE
     # consent flow) — never set by hand. Long-lived; the pipeline mints a
     # fresh short-lived access token from this on every Canva call.

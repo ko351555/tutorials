@@ -40,12 +40,8 @@ class CanvaClient:
         self.secrets = secrets
         self.mock = mock
 
-    def _configured(self) -> bool:
-        return bool(
-            self.secrets.canva_brand_template_id
-            and self.secrets.canva_client_id
-            and self.secrets.canva_client_secret
-        )
+    def _configured(self, template_id: str) -> bool:
+        return bool(template_id and self.secrets.canva_client_id and self.secrets.canva_client_secret)
 
     def _access_token(self) -> str:
         if not self.secrets.canva_refresh_token:
@@ -87,15 +83,13 @@ class CanvaClient:
             )
         return body["access_token"]
 
-    def _export_template_clip(self, fields: dict, out_path: Path) -> Path:
-        if not self.secrets.canva_brand_template_id:
-            raise FatalError("CANVA_BRAND_TEMPLATE_ID not set")
+    def _export_template_clip(self, template_id: str, fields: dict, out_path: Path) -> Path:
         token = self._access_token()
         try:
             autofill_resp = requests.post(
                 AUTOFILL_URL,
                 headers={"Authorization": f"Bearer {token}"},
-                json={"brand_template_id": self.secrets.canva_brand_template_id, "data": fields},
+                json={"brand_template_id": template_id, "data": fields},
                 timeout=60,
             )
         except requests.RequestException as exc:
@@ -125,22 +119,26 @@ class CanvaClient:
             time.sleep(2)
         raise RetryableError("Canva export timed out waiting for job completion")
 
-    def apply_branding(self, rough_cut: Path, out_path: Path, fields: dict) -> Path:
+    def apply_branding(self, rough_cut: Path, out_path: Path, fields: dict, *, template_id: str) -> Path:
+        """template_id must match rough_cut's own dimensions — Canva Brand
+        Templates render at whatever canvas size they were built with, so
+        the long-form (16:9) and Shorts (9:16) templates are two separate
+        Canva templates, never the same one."""
         out_path.parent.mkdir(parents=True, exist_ok=True)
         if self.mock:
             shutil.copyfile(rough_cut, out_path)
             return out_path
 
-        if not self._configured():
+        if not self._configured(template_id):
             # Canva Connect requires a one-time OAuth2/PKCE app setup plus a
             # hand-built Brand Template — most channels won't have that
             # wired up yet. Branding is an enhancement (intro/outro), not
-            # the deliverable, so pass the rough cut through unbranded
-            # rather than blocking the whole pipeline on it.
+            # the deliverable, so pass the video through unbranded rather
+            # than blocking the whole pipeline on it.
             log.warning(
                 "branding.canva_not_configured",
-                detail="CANVA_CLIENT_ID/CANVA_CLIENT_SECRET/CANVA_BRAND_TEMPLATE_ID "
-                "not fully set — skipping Canva branding, passing the rough cut "
+                detail="CANVA_CLIENT_ID/CANVA_CLIENT_SECRET/a brand template_id "
+                "not fully set — skipping Canva branding, passing the video "
                 "through unbranded. See .env.example for setup.",
             )
             shutil.copyfile(rough_cut, out_path)
@@ -148,8 +146,8 @@ class CanvaClient:
 
         clips_dir = out_path.parent / "canva_clips"
         clips_dir.mkdir(exist_ok=True)
-        intro = self._export_template_clip({**fields, "segment": "intro"}, clips_dir / "intro.mp4")
-        outro = self._export_template_clip({**fields, "segment": "outro"}, clips_dir / "outro.mp4")
+        intro = self._export_template_clip(template_id, {**fields, "segment": "intro"}, clips_dir / "intro.mp4")
+        outro = self._export_template_clip(template_id, {**fields, "segment": "outro"}, clips_dir / "outro.mp4")
 
         concat_list = clips_dir / "concat_list.txt"
         concat_list.write_text(
