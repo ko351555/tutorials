@@ -14,7 +14,11 @@ API-vs-browser-automation decisions, and the step-by-step rollout plan.
 ```bash
 cd youtube-stickman-automation
 python -m venv .venv && source .venv/bin/activate
-pip install -e .
+pip install -e '.[whisper]'   # the [whisper] extra is required for any real (non-mock) run —
+                               # TRANSCRIPTION_PROVIDER defaults to whisper_local, which drives
+                               # ALL audio/caption/image timing sync off the actual narration
+                               # audio (real word-level timestamps, not estimates). Without it,
+                               # Stage 4 fails fast with the same install command as the fix.
 
 cp .env.example .env        # fill in API keys (see .env.example for which stages need what)
 # Fill in the three files that make this YOUR channel:
@@ -48,7 +52,7 @@ step-by-step progress tracker — run the Streamlit dashboard instead of the
 CLI:
 
 ```bash
-pip install -e '.[ui]'
+pip install -e '.[ui,whisper]'
 ystick-ui
 ```
 
