@@ -12,7 +12,7 @@ import streamlit as st
 from ystick.config import PROJECT_ROOT
 from ystick.core.orchestrator import GATE_AFTER_STAGE, STAGE_TO_GATE, Orchestrator
 from ystick.core.pipeline import STAGE_DESCRIPTIONS, STAGE_LABELS, STAGE_ORDER
-from ystick.state.models import AWAITING_APPROVAL, DONE, FAILED
+from ystick.state.models import AWAITING_APPROVAL, DONE, FAILED, RUNNING
 from ystick.ui import gates
 from ystick.ui.helpers import load_starter_topics, tail_log
 from ystick.utils.ids import new_project_id
@@ -28,10 +28,35 @@ GATE_RENDERERS = {
     "final_review": gates.render_final_review,
 }
 
+PROJECT_STATUS_LABEL = {
+    "done": "✅ Complete",
+    "failed": "❌ Failed",
+    "awaiting_approval": "⏳ Awaiting approval",
+    "running": "🔵 In progress",
+    "pending": "⚪ Not started",
+}
+
 
 @st.cache_resource
 def get_orchestrator() -> Orchestrator:
     return Orchestrator()
+
+
+def _project_overall_status(orch: Orchestrator, project_id: str) -> str:
+    """Collapses a project's per-stage statuses into one headline state for
+    the sidebar list — otherwise every project just shows its bare ID and
+    there's no way to tell a finished one from a stalled one without
+    clicking into each in turn."""
+    statuses = {s.status for s in orch.status(project_id)}
+    if statuses == {DONE}:
+        return "done"
+    if FAILED in statuses:
+        return "failed"
+    if AWAITING_APPROVAL in statuses:
+        return "awaiting_approval"
+    if DONE in statuses or RUNNING in statuses:
+        return "running"
+    return "pending"
 
 
 def run_with_progress(orch: Orchestrator, project_id: str) -> None:
@@ -180,7 +205,14 @@ def sidebar(orch: Orchestrator) -> str | None:
     # creating a project, before the query param below has been written).
     current = st.session_state.get("current_project") or st.query_params.get("project")
     default_idx = projects.index(current) if current in projects else 0
-    selected = st.sidebar.radio("Select a project", projects, index=default_idx, label_visibility="collapsed")
+
+    def _format_project(pid: str) -> str:
+        status = _project_overall_status(orch, pid)
+        return f"{PROJECT_STATUS_LABEL[status]} — {pid}"
+
+    selected = st.sidebar.radio(
+        "Select a project", projects, index=default_idx, format_func=_format_project, label_visibility="collapsed"
+    )
     if st.query_params.get("project") != selected:
         st.query_params["project"] = selected
     return selected
