@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+from typing import Callable
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
@@ -77,16 +78,22 @@ def upload_video(
     thumbnail_path: str | Path | None = None,
     client_secrets_path: str | Path = DEFAULT_CLIENT_SECRETS,
     token_path: str | Path = DEFAULT_TOKEN_PATH,
+    on_log: Callable[[str], None] | None = None,
+    on_progress: Callable[[float], None] | None = None,
 ) -> str:
     """Upload a video and return its YouTube video ID.
 
     `publish_at` (RFC3339, e.g. "2026-08-15T09:00:00Z") schedules the video —
     YouTube requires privacy_status to be "private" when publish_at is set;
     it flips to public automatically at that time.
+
+    `on_log`/`on_progress` mirror assemble.assemble()'s callbacks, for a UI
+    to show upload progress separately from the ffmpeg assembly progress.
     """
     from googleapiclient.http import MediaFileUpload
     from googleapiclient.errors import HttpError
 
+    log = on_log or print
     youtube = get_authenticated_service(client_secrets_path, token_path)
 
     status = {
@@ -109,25 +116,30 @@ def upload_video(
     media = MediaFileUpload(str(file_path), chunksize=50 * 1024 * 1024, resumable=True)
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
 
-    print(f"Uploading {file_path} ...")
+    log(f"Uploading {file_path} ...")
     response = None
     while response is None:
         try:
             status_obj, response = request.next_chunk()
             if status_obj:
-                print(f"  {int(status_obj.progress() * 100)}% uploaded")
+                pct = status_obj.progress() * 100
+                if on_progress:
+                    on_progress(pct)
+                log(f"  {int(pct)}% uploaded")
         except HttpError as e:
             if e.resp.status in (500, 502, 503, 504):
-                print(f"  Transient error {e.resp.status}, retrying chunk...")
+                log(f"  Transient error {e.resp.status}, retrying chunk...")
                 continue
             raise
 
     video_id = response["id"]
-    print(f"Uploaded: https://youtu.be/{video_id}")
+    if on_progress:
+        on_progress(100.0)
+    log(f"Uploaded: https://youtu.be/{video_id}")
 
     if thumbnail_path:
         youtube.thumbnails().set(videoId=video_id, media_body=MediaFileUpload(str(thumbnail_path))).execute()
-        print(f"  Thumbnail set from {thumbnail_path}")
+        log(f"  Thumbnail set from {thumbnail_path}")
 
     return video_id
 

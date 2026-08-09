@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dream Sanctum — Video Automation</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <h1>Dream Sanctum Music — Video Automation</h1>
+    <p class="subtitle">Loop clip + track to final length, then upload to YouTube. Runs locally — nothing leaves this machine except the YouTube upload itself.</p>
+    <div id="youtube-status" class="yt-status">Checking YouTube connection…</div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>1. Content file</h2>
+      <p class="hint">Upload the content file Claude generated for this batch (title/description/tags per video).</p>
+      <div class="row">
+        <input type="file" id="content-file-input" accept=".md,.txt">
+        <button id="parse-btn">Parse</button>
+      </div>
+      <div id="parse-error" class="error"></div>
+      <div id="parsed-summary" class="hint"></div>
+    </section>
+
+    <section class="card" id="settings-card" style="display:none">
+      <h2>2. Batch settings</h2>
+      <div class="settings-grid">
+        <label>Output folder
+          <input type="text" id="output-dir" value="output">
+        </label>
+        <label>YouTube category ID
+          <input type="text" id="category-id" value="10" title="10 = Music">
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" id="reencode-check">
+          Re-encode video (smaller file, slower)
+        </label>
+        <label>Video bitrate (if re-encoding)
+          <input type="text" id="video-bitrate" value="2500k">
+        </label>
+      </div>
+    </section>
+
+    <section class="card" id="videos-card" style="display:none">
+      <h2>3. Attach files per video</h2>
+      <div id="video-rows"></div>
+      <div class="row">
+        <button id="start-batch-btn">Start batch</button>
+        <span id="start-batch-error" class="error"></span>
+      </div>
+    </section>
+
+    <section class="card" id="jobs-card" style="display:none">
+      <h2>4. Progress</h2>
+      <div id="jobs-table"></div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

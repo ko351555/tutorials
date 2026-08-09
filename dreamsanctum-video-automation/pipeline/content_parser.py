@@ -134,9 +134,13 @@ def parse_video_chunk(chunk: str) -> VideoMetadata:
     )
 
 
+def parse_content_text(text: str) -> list[VideoMetadata]:
+    return [parse_video_chunk(c) for c in _split_videos(text)]
+
+
 def parse_content_file(path: str | Path) -> list[VideoMetadata]:
     text = Path(path).read_text(encoding="utf-8")
-    return [parse_video_chunk(c) for c in _split_videos(text)]
+    return parse_content_text(text)
 
 
 def get_video(path: str | Path, video_number: int) -> VideoMetadata:

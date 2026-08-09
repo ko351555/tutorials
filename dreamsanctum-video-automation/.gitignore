@@ -14,3 +14,6 @@ output/
 *.mp4
 *.mp3
 !sample_content/**
+
+# Web UI: files uploaded through the browser (clips, tracks, thumbnails, content files)
+webui_uploads/

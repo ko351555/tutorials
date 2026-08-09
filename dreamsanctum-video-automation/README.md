@@ -53,7 +53,34 @@ limits ffmpeg doesn't have.
    - `client_secrets.json` and `token.json` are already in `.gitignore` —
      never commit them, they grant upload access to your channel.
 
-## Single video
+## Web UI (recommended for a batch of ~10)
+
+A local browser UI wraps the whole batch flow so you don't type CLI commands:
+
+```
+python webui/app.py
+# open http://127.0.0.1:5000
+```
+
+From there:
+1. Upload the content file for this batch → it parses and lists every `VIDEO <n>`.
+2. Attach the clip + track (and optional thumbnail) you downloaded from
+   Google Flow / Suno for each video, set hours/privacy/schedule per row.
+3. Click **Start batch** — each video assembles (ffmpeg) then uploads
+   (YouTube) one at a time, with a live progress bar and expandable log per
+   video, and a YouTube connect status/button at the top for the one-time
+   OAuth step.
+
+It's the same `create_video.run_single()` / `assemble()` / `upload_video()`
+functions underneath — the UI is just a browser front end for them, so
+everything in "One-time setup" below still applies (ffmpeg installed,
+`client_secrets.json` in place).
+
+**Security note:** this binds to `127.0.0.1` only and has no login — it's a
+single-user local tool. Don't expose it to a network; anyone who can reach it
+can trigger uploads to your channel.
+
+## Single video (CLI)
 
 Once you've downloaded the clip from Google Flow and the track from Suno:
 
@@ -122,6 +149,8 @@ python pipeline/content_parser.py sample_content/dream_sanctum_videos_11_15.md -
 - `create_video.py` — single-video CLI tying the three together
 - `batch_run.py` — batch CLI for a full set of videos from `batch_config.yaml`
 - `batch_config.example.yaml` — copy to `batch_config.yaml` and fill in your paths
+- `webui/app.py` — local Flask server for the browser UI (uses the same functions as the CLI)
+- `webui/templates/`, `webui/static/` — the browser UI itself
 
 ## Notes on file size
 

@@ -24,9 +24,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Callable
+
+TIME_RE = re.compile(r"time=(\d+):(\d+):(\d+\.\d+)")
 
 
 class FfmpegNotFound(RuntimeError):
@@ -110,7 +114,18 @@ def assemble(
     copy_video: bool = True,
     video_bitrate: str | None = "2500k",
     dry_run: bool = False,
+    on_log: Callable[[str], None] | None = None,
+    on_progress: Callable[[float], None] | None = None,
 ) -> Path:
+    """Run ffmpeg to build the final looped+muxed video.
+
+    `on_log(message)` receives human-readable status lines (defaults to
+    print). `on_progress(percent)` receives 0-100 float updates parsed from
+    ffmpeg's own `time=` output, for a UI progress bar; it is not called at
+    all if omitted, and log lines are throttled to roughly every 5% so a
+    long 8-hour encode doesn't flood the log with hundreds of lines.
+    """
+    log = on_log or print
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     target_seconds = hours * 3600
@@ -121,15 +136,41 @@ def assemble(
     )
 
     if dry_run:
-        print(" ".join(cmd))
+        log(" ".join(cmd))
         return output_path
 
     _require_ffmpeg()
-    print(f"Assembling {hours}h video -> {output_path}")
-    print(f"  video source: {video_path}")
-    print(f"  audio source: {audio_path}")
-    subprocess.run(cmd, check=True)
-    print(f"Done: {output_path}")
+    log(f"Assembling {hours}h video -> {output_path}")
+    log(f"  video source: {video_path}")
+    log(f"  audio source: {audio_path}")
+
+    process = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+    )
+    last_logged_bucket = -1
+    for line in process.stdout:
+        m = TIME_RE.search(line)
+        if not m:
+            continue
+        h, mnt, s = m.groups()
+        current_seconds = int(h) * 3600 + int(mnt) * 60 + float(s)
+        pct = min(current_seconds / target_seconds * 100, 100.0) if target_seconds else 100.0
+
+        if on_progress:
+            on_progress(pct)
+
+        bucket = int(pct // 5)
+        if bucket != last_logged_bucket:
+            last_logged_bucket = bucket
+            log(f"  ffmpeg progress: {pct:.0f}%")
+
+    process.wait()
+    if process.returncode != 0:
+        raise subprocess.CalledProcessError(process.returncode, cmd)
+
+    if on_progress:
+        on_progress(100.0)
+    log(f"Done: {output_path}")
     return output_path
 
 

@@ -24,6 +24,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).parent / "pipeline"))
 
@@ -51,7 +52,14 @@ def run_single(
     category_id: str = "10",
     thumbnail: str | None = None,
     dry_run: bool = False,
+    on_log: Callable[[str], None] | None = None,
+    on_progress: Callable[[str, float], None] | None = None,
 ) -> dict:
+    """`on_progress(phase, percent)` is called with phase "assemble" during
+    ffmpeg looping/muxing and phase "upload" during the YouTube upload, each
+    0-100, so a UI can track the two stages separately (or combine them).
+    """
+    log = on_log or print
     meta: VideoMetadata = get_video(content_file, video_number)
 
     output_path = Path(output_dir) / f"video_{video_number}_{slugify(meta.video_name)}.mp4"
@@ -64,6 +72,8 @@ def run_single(
         copy_video=not reencode,
         video_bitrate=video_bitrate,
         dry_run=dry_run,
+        on_log=log,
+        on_progress=(lambda pct: on_progress("assemble", pct)) if on_progress else None,
     )
 
     result = {
@@ -86,10 +96,12 @@ def run_single(
             privacy_status=privacy,
             publish_at=publish_at,
             thumbnail_path=thumbnail,
+            on_log=log,
+            on_progress=(lambda pct: on_progress("upload", pct)) if on_progress else None,
         )
         result["youtube_id"] = video_id
     elif upload and dry_run:
-        print(f"[dry-run] Would upload '{meta.youtube_title}' with {len(meta.youtube_tags)} tags")
+        log(f"[dry-run] Would upload '{meta.youtube_title}' with {len(meta.youtube_tags)} tags")
 
     return result
 
