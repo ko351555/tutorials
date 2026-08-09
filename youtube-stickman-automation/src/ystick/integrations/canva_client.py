@@ -146,8 +146,15 @@ class CanvaClient:
 
         clips_dir = out_path.parent / "canva_clips"
         clips_dir.mkdir(exist_ok=True)
-        intro = self._export_template_clip(template_id, {**fields, "segment": "intro"}, clips_dir / "intro.mp4")
-        outro = self._export_template_clip(template_id, {**fields, "segment": "outro"}, clips_dir / "outro.mp4")
+        # Reuse the same "title" data field for both exports, but with
+        # different content, so intro and outro actually look different
+        # from one template — the video's title on the intro card, a CTA
+        # on the outro card — rather than autofilling identical data twice.
+        cta_text = fields.get("cta_text") or f"Subscribe to {fields.get('channel_name', 'the channel')} for more!"
+        intro_fields = {**fields, "segment": "intro"}
+        outro_fields = {**fields, "title": cta_text, "segment": "outro"}
+        intro = self._export_template_clip(template_id, intro_fields, clips_dir / "intro.mp4")
+        outro = self._export_template_clip(template_id, outro_fields, clips_dir / "outro.mp4")
 
         concat_list = clips_dir / "concat_list.txt"
         concat_list.write_text(

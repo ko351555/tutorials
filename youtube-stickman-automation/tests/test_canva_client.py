@@ -138,3 +138,92 @@ def test_apply_branding_uses_the_passed_template_id_not_a_hardcoded_secret(tmp_p
     assert captured_template_ids == [
         "LONGFORM_TEMPLATE", "LONGFORM_TEMPLATE", "SHORTS_TEMPLATE", "SHORTS_TEMPLATE",
     ]
+
+
+def test_apply_branding_intro_and_outro_get_different_title_content(tmp_path: Path, monkeypatch):
+    """Real gap fixed: intro and outro used to autofill identical data (same
+    title, same everything), so both cards rendered the same. The outro
+    should show a CTA instead of the video title, reusing the same "title"
+    data field rather than requiring a second Canva-side field."""
+    captured_data = []
+
+    def fake_post(url, headers=None, json=None, data=None, timeout=None):
+        if url == canva_client_module.TOKEN_URL:
+            return _FakeResponse(200, {"access_token": "tok"})
+        if url == canva_client_module.AUTOFILL_URL:
+            captured_data.append(json["data"])
+            return _FakeResponse(200, {"design": {"id": "design-1"}})
+        if url == canva_client_module.EXPORT_URL:
+            return _FakeResponse(200, {"job": {"id": "job-1"}})
+        raise AssertionError(f"unexpected POST {url}")
+
+    def fake_get(url, headers=None, timeout=None):
+        if url == f"{canva_client_module.EXPORT_URL}/job-1":
+            return _FakeResponse(200, {"job": {"status": "success", "urls": ["https://example.com/clip.mp4"]}})
+
+        class _FakeResponseWithContent:
+            content = b"FAKE_CLIP_BYTES"
+
+        return _FakeResponseWithContent()
+
+    monkeypatch.setattr(canva_client_module.requests, "post", fake_post)
+    monkeypatch.setattr(canva_client_module.requests, "get", fake_get)
+    monkeypatch.setattr(canva_client_module, "run_ffmpeg", lambda cmd: None)
+
+    rough_cut = tmp_path / "rough_cut.mp4"
+    rough_cut.write_bytes(b"FAKE_VIDEO_BYTES")
+    secrets = Secrets(canva_client_id="c", canva_client_secret="s", canva_refresh_token="rt")
+    client = CanvaClient(secrets, mock=False)
+
+    client.apply_branding(
+        rough_cut, tmp_path / "out.mp4",
+        {"title": "5 AI Jobs That Will Vanish", "channel_name": "The Stickman Blueprint"},
+        template_id="TEMPLATE_1",
+    )
+
+    intro_data, outro_data = captured_data
+    assert intro_data["title"] == "5 AI Jobs That Will Vanish"
+    assert outro_data["title"] != intro_data["title"]
+    assert "The Stickman Blueprint" in outro_data["title"]
+    assert intro_data["channel_name"] == outro_data["channel_name"] == "The Stickman Blueprint"
+
+
+def test_apply_branding_respects_explicit_cta_text(tmp_path: Path, monkeypatch):
+    captured_data = []
+
+    def fake_post(url, headers=None, json=None, data=None, timeout=None):
+        if url == canva_client_module.TOKEN_URL:
+            return _FakeResponse(200, {"access_token": "tok"})
+        if url == canva_client_module.AUTOFILL_URL:
+            captured_data.append(json["data"])
+            return _FakeResponse(200, {"design": {"id": "design-1"}})
+        if url == canva_client_module.EXPORT_URL:
+            return _FakeResponse(200, {"job": {"id": "job-1"}})
+        raise AssertionError(f"unexpected POST {url}")
+
+    def fake_get(url, headers=None, timeout=None):
+        if url == f"{canva_client_module.EXPORT_URL}/job-1":
+            return _FakeResponse(200, {"job": {"status": "success", "urls": ["https://example.com/clip.mp4"]}})
+
+        class _FakeResponseWithContent:
+            content = b"FAKE_CLIP_BYTES"
+
+        return _FakeResponseWithContent()
+
+    monkeypatch.setattr(canva_client_module.requests, "post", fake_post)
+    monkeypatch.setattr(canva_client_module.requests, "get", fake_get)
+    monkeypatch.setattr(canva_client_module, "run_ffmpeg", lambda cmd: None)
+
+    rough_cut = tmp_path / "rough_cut.mp4"
+    rough_cut.write_bytes(b"FAKE_VIDEO_BYTES")
+    secrets = Secrets(canva_client_id="c", canva_client_secret="s", canva_refresh_token="rt")
+    client = CanvaClient(secrets, mock=False)
+
+    client.apply_branding(
+        rough_cut, tmp_path / "out.mp4",
+        {"title": "t", "channel_name": "c", "cta_text": "Hit follow for weekly frameworks"},
+        template_id="TEMPLATE_1",
+    )
+
+    _, outro_data = captured_data
+    assert outro_data["title"] == "Hit follow for weekly frameworks"
