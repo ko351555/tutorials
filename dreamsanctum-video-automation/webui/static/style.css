@@ -149,10 +149,12 @@ button:disabled { background: var(--border); color: var(--muted); cursor: not-al
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
-.job-status.queued { background: var(--border); color: var(--muted); }
-.job-status.running { background: #3730a3; color: #c7d2fe; }
+.job-status.queued, .job-status.queued_upload { background: var(--border); color: var(--muted); }
+.job-status.assembling, .job-status.uploading { background: #3730a3; color: #c7d2fe; }
+.job-status.awaiting_approval { background: #78350f; color: var(--warn); }
 .job-status.done { background: #14532d; color: var(--ok); }
 .job-status.error { background: #7f1d1d; color: var(--error); }
+.job-status.rejected { background: #44403c; color: var(--muted); }
 
 .progress-bar {
   height: 6px;
@@ -185,3 +187,55 @@ button:disabled { background: var(--border); color: var(--muted); cursor: not-al
 
 .yt-link { color: var(--accent); text-decoration: none; }
 .yt-link:hover { text-decoration: underline; }
+
+.prompt-details { margin-bottom: 0.75rem; font-size: 0.85rem; }
+.prompt-details summary { cursor: pointer; color: var(--accent); }
+.prompt-block { margin-top: 0.6rem; }
+.prompt-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.25rem;
+}
+.prompt-text {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.82rem;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+.copy-btn {
+  padding: 0.1rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  background: var(--border);
+  color: var(--text);
+}
+.copy-btn:hover { background: var(--accent); color: #14121f; }
+
+.approval-block {
+  border: 1px solid var(--warn);
+  border-radius: 8px;
+  padding: 0.85rem;
+  margin-top: 0.75rem;
+  background: rgba(251, 191, 36, 0.06);
+}
+.preview-player {
+  width: 100%;
+  max-height: 320px;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  background: #000;
+}
+.secondary-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.secondary-btn:hover { background: var(--border); }

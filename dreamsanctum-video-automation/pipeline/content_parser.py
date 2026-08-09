@@ -36,10 +36,16 @@ from typing import Optional
 VIDEO_HEADER_RE = re.compile(r"VIDEO\s+(\d+)\s*[—\-–]\s*(.+)")
 
 # Order matters: this defines where each field stops (start of the next
-# label that appears in the source documents).
+# label that appears in the source documents). Newer content files add
+# SUNO PROMPT / LYRICS FIELD between the video prompt and the YouTube title
+# (e.g. Categories 5-7) — older files (e.g. Videos 11-15) simply don't have
+# them, which _extract_field handles fine since it just looks for whichever
+# later label appears first.
 FIELD_LABELS = [
     "CHATGPT IMAGE PROMPT",
     "GOOGLE FLOW VIDEO PROMPT",
+    "SUNO PROMPT",
+    "LYRICS FIELD",
     "YOUTUBE TITLE",
     "YOUTUBE DESCRIPTION",
     "SHORTS TITLE",
@@ -49,7 +55,10 @@ FIELD_LABELS = [
 # Instagram sections are numbered/free-form ("INSTAGRAM OPTION 1 — ...", "INSTAGRAM OPTION 2 — ...")
 INSTAGRAM_LABEL_RE = re.compile(r"^INSTAGRAM OPTION\s+\d+", re.MULTILINE)
 
-HASHTAG_RE = re.compile(r"#(\w+)")
+# Restricted to ASCII word chars: PDF text extraction sometimes leaves stray
+# broken-emoji remnants like "# し #" at the end of a hashtag line, and a
+# plain \w would pick "し" up as a bogus tag.
+HASHTAG_RE = re.compile(r"#([A-Za-z0-9]+)")
 
 
 @dataclass
@@ -58,6 +67,8 @@ class VideoMetadata:
     video_name: str
     chatgpt_image_prompt: str = ""
     google_flow_video_prompt: str = ""
+    suno_prompt: str = ""
+    lyrics: str = ""
     youtube_title: str = ""
     youtube_description: str = ""
     youtube_tags: list = field(default_factory=list)
@@ -124,6 +135,8 @@ def parse_video_chunk(chunk: str) -> VideoMetadata:
         video_name=video_name,
         chatgpt_image_prompt=fields["CHATGPT IMAGE PROMPT"],
         google_flow_video_prompt=fields["GOOGLE FLOW VIDEO PROMPT"],
+        suno_prompt=fields["SUNO PROMPT"],
+        lyrics=fields["LYRICS FIELD"],
         youtube_title=fields["YOUTUBE TITLE"],
         youtube_description=fields["YOUTUBE DESCRIPTION"],
         youtube_tags=tags,

@@ -78,6 +78,25 @@ el("parse-btn").addEventListener("click", async () => {
   renderVideoRows();
 });
 
+function escapeHtml(s) {
+  const d = document.createElement("div");
+  d.textContent = s || "";
+  return d.innerHTML;
+}
+
+function copyBtn(text) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "copy-btn";
+  btn.textContent = "Copy";
+  btn.onclick = () => {
+    navigator.clipboard.writeText(text);
+    btn.textContent = "Copied";
+    setTimeout(() => (btn.textContent = "Copy"), 1200);
+  };
+  return btn;
+}
+
 function renderVideoRows() {
   const container = el("video-rows");
   container.innerHTML = "";
@@ -88,6 +107,19 @@ function renderVideoRows() {
     row.innerHTML = `
       <h3><label><input type="checkbox" class="include-check" checked> VIDEO ${v.video_number} — ${v.video_name}</label></h3>
       <div class="title">${v.youtube_title || "(no title parsed)"} · ${v.tag_count} tags</div>
+
+      <details class="prompt-details">
+        <summary>Prompts for Google Flow &amp; Suno (generate these first, then attach the files below)</summary>
+        <div class="prompt-block">
+          <div class="prompt-label">Google Flow video prompt <span class="prompt-copy-slot-gf"></span></div>
+          <div class="prompt-text">${escapeHtml(v.google_flow_video_prompt) || "(none parsed)"}</div>
+        </div>
+        <div class="prompt-block">
+          <div class="prompt-label">Suno prompt <span class="prompt-copy-slot-suno"></span></div>
+          <div class="prompt-text">${escapeHtml(v.suno_prompt) || "(none parsed — type your own in Suno)"}</div>
+        </div>
+      </details>
+
       <div class="video-row-grid">
         <label>Clip (Google Flow, silent .mp4)
           <input type="file" class="clip-input" accept="video/mp4">
@@ -112,10 +144,16 @@ function renderVideoRows() {
           <input type="datetime-local" class="publish-input">
         </label>
         <label class="checkbox">
-          <input type="checkbox" class="upload-check" checked> Upload to YouTube
+          <input type="checkbox" class="upload-check" checked> Upload to YouTube (you'll still approve after preview)
         </label>
       </div>
     `;
+    if (v.google_flow_video_prompt) {
+      row.querySelector(".prompt-copy-slot-gf").appendChild(copyBtn(v.google_flow_video_prompt));
+    }
+    if (v.suno_prompt) {
+      row.querySelector(".prompt-copy-slot-suno").appendChild(copyBtn(v.suno_prompt));
+    }
     container.appendChild(row);
   });
 }
@@ -211,12 +249,14 @@ function stopPolling() {
   pollTimer = null;
 }
 
+const TERMINAL_STATUSES = ["done", "error", "rejected", "awaiting_approval"];
+
 async function pollJobs() {
   const res = await fetch("/api/jobs");
   const jobs = await res.json();
   renderJobs(jobs);
 
-  const allSettled = jobs.length > 0 && jobs.every((j) => j.status === "done" || j.status === "error");
+  const allSettled = jobs.length > 0 && jobs.every((j) => TERMINAL_STATUSES.includes(j.status));
   if (allSettled) stopPolling();
 }
 
@@ -240,15 +280,27 @@ function renderJobs(jobs) {
       const outPath = job.output_path ? `<div class="hint">${job.output_path}</div>` : "";
       const errMsg = job.error ? `<div class="error">${job.error}</div>` : "";
 
+      const approvalBlock = job.status === "awaiting_approval" ? `
+        <div class="approval-block">
+          <p class="hint">Assembly finished. Preview it below, then approve to upload or reject to stop here — nothing has been sent to YouTube yet.</p>
+          <video class="preview-player" controls preload="metadata" src="/api/jobs/${job.id}/preview"></video>
+          <div class="row">
+            <button class="approve-btn">Approve &amp; upload</button>
+            <button class="reject-btn secondary-btn">Reject</button>
+          </div>
+        </div>
+      ` : "";
+
       div.innerHTML = `
         <div class="job-head">
           <span>VIDEO ${job.video_number}${job.video_name ? " — " + job.video_name : ""}</span>
-          <span class="job-status ${job.status}">${job.status}</span>
+          <span class="job-status ${job.status}">${job.status.replace("_", " ")}</span>
         </div>
         <div class="progress-label">Assemble</div>
         <div class="progress-bar"><div class="progress-bar-fill" style="width:${job.assemble_pct || 0}%"></div></div>
         <div class="progress-label">Upload</div>
         <div class="progress-bar"><div class="progress-bar-fill" style="width:${job.upload_pct || 0}%"></div></div>
+        ${approvalBlock}
         ${outPath}
         ${ytLink}
         ${errMsg}
@@ -256,12 +308,28 @@ function renderJobs(jobs) {
       `;
 
       div.querySelector(".job-head").addEventListener("click", () => toggleLog(job.id, div));
+
+      const approveBtn = div.querySelector(".approve-btn");
+      if (approveBtn) approveBtn.addEventListener("click", (e) => { e.stopPropagation(); decideJob(job.id, "approve"); });
+      const rejectBtn = div.querySelector(".reject-btn");
+      if (rejectBtn) rejectBtn.addEventListener("click", (e) => { e.stopPropagation(); decideJob(job.id, "reject"); });
+
       container.appendChild(div);
 
       if (openLogIds.has(job.id)) {
         toggleLog(job.id, div, true);
       }
     });
+}
+
+async function decideJob(jobId, action) {
+  const res = await fetch(`/api/jobs/${jobId}/${action}`, { method: "POST" });
+  const data = await res.json();
+  if (data.error) {
+    alert(data.error);
+    return;
+  }
+  startPolling();
 }
 
 async function toggleLog(jobId, div, forceOpen) {

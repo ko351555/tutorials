@@ -37,6 +37,80 @@ def slugify(name: str) -> str:
     return slug or "video"
 
 
+def build_output_path(content_file: str, video_number: int, output_dir: str) -> tuple[VideoMetadata, Path]:
+    meta: VideoMetadata = get_video(content_file, video_number)
+    output_path = Path(output_dir) / f"video_{video_number}_{slugify(meta.video_name)}.mp4"
+    return meta, output_path
+
+
+def assemble_only(
+    content_file: str,
+    video_number: int,
+    clip: str,
+    audio: str,
+    hours: float,
+    output_dir: str = "output",
+    reencode: bool = False,
+    video_bitrate: str = "2500k",
+    dry_run: bool = False,
+    on_log: Callable[[str], None] | None = None,
+    on_progress: Callable[[str, float], None] | None = None,
+) -> dict:
+    """Runs just the ffmpeg loop+mux stage. Returns enough to hand to
+    upload_only() later (or to preview/inspect before deciding to upload).
+    """
+    meta, output_path = build_output_path(content_file, video_number, output_dir)
+
+    assemble(
+        video_path=clip,
+        audio_path=audio,
+        output_path=output_path,
+        hours=hours,
+        copy_video=not reencode,
+        video_bitrate=video_bitrate,
+        dry_run=dry_run,
+        on_log=on_log,
+        on_progress=(lambda pct: on_progress("assemble", pct)) if on_progress else None,
+    )
+
+    return {
+        "video_number": video_number,
+        "video_name": meta.video_name,
+        "output_path": str(output_path),
+    }
+
+
+def upload_only(
+    content_file: str,
+    video_number: int,
+    output_path: str,
+    privacy: str = "private",
+    publish_at: str | None = None,
+    category_id: str = "10",
+    thumbnail: str | None = None,
+    on_log: Callable[[str], None] | None = None,
+    on_progress: Callable[[str, float], None] | None = None,
+) -> str:
+    """Runs just the YouTube upload stage against an already-assembled file."""
+    sys.path.insert(0, str(Path(__file__).parent / "pipeline"))
+    from youtube_upload import upload_video
+
+    meta: VideoMetadata = get_video(content_file, video_number)
+
+    return upload_video(
+        file_path=output_path,
+        title=meta.youtube_title,
+        description=meta.youtube_description,
+        tags=meta.youtube_tags,
+        category_id=category_id,
+        privacy_status=privacy,
+        publish_at=publish_at,
+        thumbnail_path=thumbnail,
+        on_log=on_log,
+        on_progress=(lambda pct: on_progress("upload", pct)) if on_progress else None,
+    )
+
+
 def run_single(
     content_file: str,
     video_number: int,
@@ -55,52 +129,32 @@ def run_single(
     on_log: Callable[[str], None] | None = None,
     on_progress: Callable[[str, float], None] | None = None,
 ) -> dict:
-    """`on_progress(phase, percent)` is called with phase "assemble" during
+    """CLI/batch convenience: assemble then (if requested) upload, straight
+    through with no pause in between. The web UI instead calls assemble_only()
+    and upload_only() separately so it can gate the upload on user approval —
+    see webui/app.py.
+
+    `on_progress(phase, percent)` is called with phase "assemble" during
     ffmpeg looping/muxing and phase "upload" during the YouTube upload, each
     0-100, so a UI can track the two stages separately (or combine them).
     """
     log = on_log or print
-    meta: VideoMetadata = get_video(content_file, video_number)
 
-    output_path = Path(output_dir) / f"video_{video_number}_{slugify(meta.video_name)}.mp4"
-
-    assemble(
-        video_path=clip,
-        audio_path=audio,
-        output_path=output_path,
-        hours=hours,
-        copy_video=not reencode,
-        video_bitrate=video_bitrate,
-        dry_run=dry_run,
-        on_log=log,
-        on_progress=(lambda pct: on_progress("assemble", pct)) if on_progress else None,
+    result = assemble_only(
+        content_file, video_number, clip, audio, hours,
+        output_dir=output_dir, reencode=reencode, video_bitrate=video_bitrate,
+        dry_run=dry_run, on_log=log, on_progress=on_progress,
     )
-
-    result = {
-        "video_number": video_number,
-        "video_name": meta.video_name,
-        "output_path": str(output_path),
-        "youtube_id": None,
-    }
+    result["youtube_id"] = None
 
     if upload and not dry_run:
-        sys.path.insert(0, str(Path(__file__).parent / "pipeline"))
-        from youtube_upload import upload_video
-
-        video_id = upload_video(
-            file_path=output_path,
-            title=meta.youtube_title,
-            description=meta.youtube_description,
-            tags=meta.youtube_tags,
-            category_id=category_id,
-            privacy_status=privacy,
-            publish_at=publish_at,
-            thumbnail_path=thumbnail,
-            on_log=log,
-            on_progress=(lambda pct: on_progress("upload", pct)) if on_progress else None,
+        result["youtube_id"] = upload_only(
+            content_file, video_number, result["output_path"],
+            privacy=privacy, publish_at=publish_at, category_id=category_id,
+            thumbnail=thumbnail, on_log=log, on_progress=on_progress,
         )
-        result["youtube_id"] = video_id
     elif upload and dry_run:
+        meta = get_video(content_file, video_number)
         log(f"[dry-run] Would upload '{meta.youtube_title}' with {len(meta.youtube_tags)} tags")
 
     return result

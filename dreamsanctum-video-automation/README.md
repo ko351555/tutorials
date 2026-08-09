@@ -64,15 +64,28 @@ python webui/app.py
 
 From there:
 1. Upload the content file for this batch → it parses and lists every `VIDEO <n>`.
+   Each row has a collapsible **"Prompts for Google Flow & Suno"** section
+   with the exact prompt text and a Copy button, so you don't have to go dig
+   it out of the PDF while you're generating the clip/track by hand.
 2. Attach the clip + track (and optional thumbnail) you downloaded from
    Google Flow / Suno for each video, set hours/privacy/schedule per row.
-3. Click **Start batch** — each video assembles (ffmpeg) then uploads
-   (YouTube) one at a time, with a live progress bar and expandable log per
-   video, and a YouTube connect status/button at the top for the one-time
-   OAuth step.
+   Testing with just one video first? Uncheck every other row (or only
+   attach files to the one you want) before starting.
+3. Click **Start batch** — each video assembles (ffmpeg) one at a time with
+   a live progress bar and expandable log.
 
-It's the same `create_video.run_single()` / `assemble()` / `upload_video()`
-functions underneath — the UI is just a browser front end for them, so
+**Nothing uploads to YouTube automatically.** If a video's "Upload to
+YouTube" box is checked, its job stops right after assembly with status
+`awaiting_approval`: you get an inline `<video>` player to scrub through the
+finished file, and **Approve & upload** / **Reject** buttons. Only clicking
+Approve starts the upload — Reject leaves the assembled MP4 on disk and goes
+no further. This is the "ask permission before the next step" gate: assembly
+runs unattended, but the upload — the one step that's hard to undo — always
+waits for you.
+
+It's the same `assemble_only()` / `upload_only()` functions from
+`create_video.py` underneath, just called as two separate steps instead of
+straight through — the UI is just a browser front end for them, so
 everything in "One-time setup" below still applies (ffmpeg installed,
 `client_secrets.json` in place).
 
@@ -126,14 +139,21 @@ touching ffmpeg or YouTube.
 
 ## Content file format
 
-`content_parser.py` expects the same format Claude already produces for you
-(see `sample_content/dream_sanctum_videos_11_15.md`, transcribed from your
-reference PDF): videos separated by a line of `=`, each starting with
-`VIDEO <n> — <NAME>`, with `YOUTUBE TITLE:`, `YOUTUBE DESCRIPTION:` (hashtags
-included at the end of the description, used to populate the video's tags),
-`SHORTS TITLE:` etc. Drop a new content file in `sample_content/` (or
-anywhere) and point `--content-file` / `content_file:` at it — no code
-changes needed for a new batch of videos.
+`content_parser.py` expects the same format Claude already produces for you:
+videos separated by a line of `=`, each starting with `VIDEO <n> — <NAME>`,
+with `YOUTUBE TITLE:`, `YOUTUBE DESCRIPTION:` (hashtags included at the end
+of the description, used to populate the video's tags), `SHORTS TITLE:` etc.
+Two sample files are included:
+
+- `sample_content/dream_sanctum_videos_11_15.md` — anxiety/mental health category
+- `sample_content/dream_sanctum_categories_5_6_7.md` — world music/seasonal/children,
+  which also has `SUNO PROMPT:` and `LYRICS FIELD:` per video (the parser
+  handles content files with or without these two fields — older files that
+  don't have them just leave `suno_prompt`/`lyrics` empty)
+
+Drop a new content file anywhere and point `--content-file` / `content_file:`
+(CLI) or the upload button (web UI) at it — no code changes needed for a new
+batch of videos.
 
 To inspect what a content file parses to without running anything else:
 

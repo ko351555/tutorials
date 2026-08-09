@@ -1,9 +1,11 @@
 """Local web UI for the DreamSanctum video pipeline.
 
-Wraps content_parser / assemble / youtube_upload (via create_video.run_single)
-behind a browser UI: parse a content file, attach a clip+track per video for
-up to a batch's worth of videos, and watch each one assemble and upload with
-a live progress bar instead of running CLI commands by hand.
+Wraps content_parser / assemble / youtube_upload (via create_video's
+assemble_only/upload_only) behind a browser UI: parse a content file, attach
+a clip+track per video for up to a batch's worth of videos, and watch each
+one assemble with a live progress bar. If the video is set to upload, the
+job stops after assembly and waits for you to preview the file and click
+Approve — nothing reaches YouTube without that explicit step.
 
 Run:
     python webui/app.py
@@ -24,7 +26,7 @@ import threading
 import uuid
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, abort, jsonify, render_template, request, send_file
 from werkzeug.utils import secure_filename
 
 ROOT = Path(__file__).parent.parent
@@ -37,7 +39,7 @@ from youtube_upload import (  # noqa: E402
     DEFAULT_TOKEN_PATH,
     get_authenticated_service,
 )
-from create_video import run_single  # noqa: E402
+from create_video import assemble_only, upload_only  # noqa: E402
 
 app = Flask(__name__)
 
@@ -46,22 +48,41 @@ UPLOAD_ROOT.mkdir(exist_ok=True)
 
 JOBS: dict[str, dict] = {}
 JOBS_LOCK = threading.Lock()
-JOB_QUEUE: "queue.Queue[str]" = queue.Queue()
+# Items are (job_id, phase) — phase "assemble" or "upload" — so approving a
+# job re-enters the same worker/queue for its upload phase instead of a
+# separate mechanism.
+JOB_QUEUE: "queue.Queue[tuple[str, str]]" = queue.Queue()
 
 
 def _job_worker():
+    # This loop must never die: it's the single long-lived worker behind
+    # every job, past and future. Catching only Exception is not enough —
+    # a handful of real-world failures (a Rust panic surfacing through a
+    # ctypes/pyo3 dependency, SystemExit from a library) are BaseException
+    # subclasses that would otherwise escape here, silently stalling every
+    # job still in the queue with no error ever shown in the UI.
     while True:
-        job_id = JOB_QUEUE.get()
+        job_id, phase = JOB_QUEUE.get()
         try:
-            _run_job(job_id)
+            if phase == "assemble":
+                _run_assemble_phase(job_id)
+            else:
+                _run_upload_phase(job_id)
+        except BaseException as e:  # noqa: BLE001 - see comment above
+            with JOBS_LOCK:
+                job = JOBS.get(job_id)
+                if job:
+                    job["status"] = "error"
+                    job["error"] = f"Unexpected worker failure: {e}"
+                    job["log"].append(f"ERROR: {e}")
         finally:
             JOB_QUEUE.task_done()
 
 
-def _run_job(job_id: str):
+def _run_assemble_phase(job_id: str):
     with JOBS_LOCK:
         job = JOBS[job_id]
-        job["status"] = "running"
+        job["status"] = "assembling"
 
     def log(msg: str):
         with JOBS_LOCK:
@@ -72,7 +93,7 @@ def _run_job(job_id: str):
             job[f"{phase}_pct"] = pct
 
     try:
-        result = run_single(
+        result = assemble_only(
             content_file=job["content_file"],
             video_number=job["video_number"],
             clip=job["clip_path"],
@@ -81,7 +102,44 @@ def _run_job(job_id: str):
             output_dir=job["output_dir"],
             reencode=job["reencode"],
             video_bitrate=job["video_bitrate"],
-            upload=job["upload"],
+            on_log=log,
+            on_progress=progress,
+        )
+        with JOBS_LOCK:
+            job["output_path"] = result["output_path"]
+            job["video_name"] = result["video_name"]
+            if job["upload"]:
+                job["status"] = "awaiting_approval"
+                job["log"].append(
+                    "Assembly complete. Preview the video and click Approve to upload, or Reject to stop here."
+                )
+            else:
+                job["status"] = "done"
+    except Exception as e:  # noqa: BLE001 - report to the UI, keep the worker alive
+        with JOBS_LOCK:
+            job["status"] = "error"
+            job["error"] = str(e)
+            job["log"].append(f"ERROR: {e}")
+
+
+def _run_upload_phase(job_id: str):
+    with JOBS_LOCK:
+        job = JOBS[job_id]
+        job["status"] = "uploading"
+
+    def log(msg: str):
+        with JOBS_LOCK:
+            job["log"].append(msg)
+
+    def progress(phase: str, pct: float):
+        with JOBS_LOCK:
+            job[f"{phase}_pct"] = pct
+
+    try:
+        video_id = upload_only(
+            content_file=job["content_file"],
+            video_number=job["video_number"],
+            output_path=job["output_path"],
             privacy=job["privacy"],
             publish_at=job["publish_at"],
             category_id=job["category_id"],
@@ -91,9 +149,8 @@ def _run_job(job_id: str):
         )
         with JOBS_LOCK:
             job["status"] = "done"
-            job["output_path"] = result["output_path"]
-            job["youtube_id"] = result["youtube_id"]
-    except Exception as e:  # noqa: BLE001 - report to the UI, keep the worker alive
+            job["youtube_id"] = video_id
+    except Exception as e:  # noqa: BLE001
         with JOBS_LOCK:
             job["status"] = "error"
             job["error"] = str(e)
@@ -133,6 +190,8 @@ def parse_content():
                 "video_name": v.video_name,
                 "youtube_title": v.youtube_title,
                 "tag_count": len(v.youtube_tags),
+                "google_flow_video_prompt": v.google_flow_video_prompt,
+                "suno_prompt": v.suno_prompt,
             }
             for v in videos
         ],
@@ -206,10 +265,47 @@ def create_batch():
         }
         with JOBS_LOCK:
             JOBS[job_id] = job
-        JOB_QUEUE.put(job_id)
+        JOB_QUEUE.put((job_id, "assemble"))
         created.append({"video_number": vn, "job_id": job_id})
 
     return jsonify({"jobs": created})
+
+
+@app.route("/api/jobs/<job_id>/approve", methods=["POST"])
+def approve_job(job_id):
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        if not job:
+            return jsonify({"error": "not found"}), 404
+        if job["status"] != "awaiting_approval":
+            return jsonify({"error": f"job is '{job['status']}', not awaiting approval"}), 400
+        job["status"] = "queued_upload"
+        job["log"].append("Upload approved.")
+    JOB_QUEUE.put((job_id, "upload"))
+    return jsonify({"status": "queued_upload"})
+
+
+@app.route("/api/jobs/<job_id>/reject", methods=["POST"])
+def reject_job(job_id):
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        if not job:
+            return jsonify({"error": "not found"}), 404
+        if job["status"] != "awaiting_approval":
+            return jsonify({"error": f"job is '{job['status']}', not awaiting approval"}), 400
+        job["status"] = "rejected"
+        job["log"].append(f"Upload rejected. Assembled file kept at {job['output_path']}.")
+    return jsonify({"status": "rejected"})
+
+
+@app.route("/api/jobs/<job_id>/preview")
+def preview_job(job_id):
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        output_path = job["output_path"] if job else None
+    if not output_path or not Path(output_path).exists():
+        abort(404)
+    return send_file(output_path, mimetype="video/mp4", conditional=True)
 
 
 @app.route("/api/jobs")
