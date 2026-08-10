@@ -16,9 +16,9 @@
   <main>
     <section class="card">
       <h2>1. Content file</h2>
-      <p class="hint">Upload the content file Claude generated for this batch (title/description/tags per video).</p>
+      <p class="hint">Upload the content file Claude generated for this batch (title/description/tags per video) — the .pdf works directly, no need to convert it.</p>
       <div class="row">
-        <input type="file" id="content-file-input" accept=".md,.txt">
+        <input type="file" id="content-file-input" accept=".pdf,.md,.txt">
         <button id="parse-btn">Parse</button>
       </div>
       <div id="parse-error" class="error"></div>

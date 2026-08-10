@@ -33,7 +33,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "pipeline"))
 
-from content_parser import parse_content_text  # noqa: E402
+from content_parser import parse_content_file  # noqa: E402
 from youtube_upload import (  # noqa: E402
     DEFAULT_CLIENT_SECRETS,
     DEFAULT_TOKEN_PATH,
@@ -177,8 +177,17 @@ def parse_content():
     saved_path = content_dir / saved_name
     file.save(saved_path)
 
-    text = saved_path.read_text(encoding="utf-8")
-    videos = parse_content_text(text)
+    try:
+        videos = parse_content_file(saved_path)
+    except RuntimeError as e:
+        # e.g. a .pdf uploaded but PyMuPDF isn't installed
+        return jsonify({"error": str(e)}), 400
+    except UnicodeDecodeError:
+        return jsonify({
+            "error": f"Could not read {file.filename} as text. Upload the .pdf directly, "
+                     "or a .md/.txt export of it.",
+        }), 400
+
     if not videos:
         return jsonify({"error": "No 'VIDEO <n> — <NAME>' blocks found in this file"}), 400
 

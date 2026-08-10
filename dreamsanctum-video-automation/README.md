@@ -143,7 +143,15 @@ touching ffmpeg or YouTube.
 videos separated by a line of `=`, each starting with `VIDEO <n> — <NAME>`,
 with `YOUTUBE TITLE:`, `YOUTUBE DESCRIPTION:` (hashtags included at the end
 of the description, used to populate the video's tags), `SHORTS TITLE:` etc.
-Two sample files are included:
+
+**You can upload the .pdf directly** — both the web UI and
+`--content-file`/`content_file:` on the CLI accept a `.pdf` and extract its
+text automatically (via PyMuPDF), no manual conversion to markdown needed.
+The extraction also undoes the PDF's own line-wrapping so titles come out as
+a single clean line and descriptions keep their real paragraph breaks. `.md`
+and `.txt` still work too, read as-is.
+
+Two sample `.md` files are included, transcribed from real content-file PDFs:
 
 - `sample_content/dream_sanctum_videos_11_15.md` — anxiety/mental health category
 - `sample_content/dream_sanctum_categories_5_6_7.md` — world music/seasonal/children,
