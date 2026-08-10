@@ -1,6 +1,7 @@
 let contentFilePath = null;
 let parsedVideos = [];
-let knownJobIds = [];
+let activeVideoNumber = null;
+let jobsByVideo = {}; // video_number -> latest job summary from /api/jobs
 let pollTimer = null;
 
 const el = (id) => document.getElementById(id);
@@ -69,13 +70,14 @@ el("parse-btn").addEventListener("click", async () => {
 
   contentFilePath = data.content_file_path;
   parsedVideos = data.videos;
+  activeVideoNumber = null;
   el("parsed-summary").textContent =
-    `Parsed ${parsedVideos.length} video(s): ` +
-    parsedVideos.map((v) => `#${v.video_number}`).join(", ");
+    `Parsed ${parsedVideos.length} video(s). Pick one below to work on.`;
 
   el("settings-card").style.display = "";
   el("videos-card").style.display = "";
-  renderVideoRows();
+  el("video-detail").innerHTML = "";
+  renderVideoList();
 });
 
 function escapeHtml(s) {
@@ -97,18 +99,58 @@ function copyBtn(text) {
   return btn;
 }
 
-function renderVideoRows() {
-  const container = el("video-rows");
+function statusBadge(status) {
+  if (!status) return "";
+  return `<span class="job-status ${status}">${status.replace("_", " ")}</span>`;
+}
+
+// ---- 3. Pick a video to work on ----
+
+function renderVideoList() {
+  const container = el("video-list");
   container.innerHTML = "";
   parsedVideos.forEach((v) => {
+    const job = jobsByVideo[v.video_number];
     const row = document.createElement("div");
-    row.className = "video-row";
-    row.dataset.videoNumber = v.video_number;
+    row.className = "video-list-item" + (v.video_number === activeVideoNumber ? " active" : "");
     row.innerHTML = `
-      <h3><label><input type="checkbox" class="include-check" checked> VIDEO ${v.video_number} — ${v.video_name}</label></h3>
+      <div class="video-list-main">
+        <div class="video-list-title">VIDEO ${v.video_number} — ${v.video_name}</div>
+        <div class="hint">${v.youtube_title || "(no title parsed)"}</div>
+      </div>
+      ${statusBadge(job && job.status)}
+    `;
+    row.addEventListener("click", () => selectVideo(v.video_number));
+    container.appendChild(row);
+  });
+}
+
+function selectVideo(videoNumber) {
+  activeVideoNumber = videoNumber;
+  renderVideoList();
+  renderVideoDetail();
+  el("video-detail").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderVideoDetail() {
+  const container = el("video-detail");
+  el("run-error").textContent = "";
+  if (activeVideoNumber == null) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const v = parsedVideos.find((p) => p.video_number === activeVideoNumber);
+  const job = jobsByVideo[activeVideoNumber];
+  const running = job && ["queued", "assembling", "queued_upload", "uploading"].includes(job.status);
+  const defaultHours = v.suggested_hours || 8;
+
+  container.innerHTML = `
+    <div class="video-detail-panel">
+      <h3>VIDEO ${v.video_number} — ${v.video_name}</h3>
       <div class="title">${v.youtube_title || "(no title parsed)"} · ${v.tag_count} tags</div>
 
-      <details class="prompt-details">
+      <details class="prompt-details" open>
         <summary>Prompts for Google Flow &amp; Suno (generate these first, then attach the files below)</summary>
         <div class="prompt-block">
           <div class="prompt-label">Google Flow video prompt <span class="prompt-copy-slot-gf"></span></div>
@@ -130,8 +172,8 @@ function renderVideoRows() {
         <label>Thumbnail (optional)
           <input type="file" class="thumb-input" accept="image/*">
         </label>
-        <label>Hours
-          <input type="number" class="hours-input" value="8" step="0.5" min="0.1">
+        <label>Hours ${v.suggested_hours ? `<span class="hint">(from script: ${v.suggested_hours}h)</span>` : ""}
+          <input type="number" class="hours-input" value="${defaultHours}" step="0.5" min="0.1">
         </label>
         <label>Privacy
           <select class="privacy-input">
@@ -147,23 +189,39 @@ function renderVideoRows() {
           <input type="checkbox" class="upload-check" checked> Upload to YouTube (you'll still approve after preview)
         </label>
       </div>
-    `;
-    if (v.google_flow_video_prompt) {
-      row.querySelector(".prompt-copy-slot-gf").appendChild(copyBtn(v.google_flow_video_prompt));
-    }
-    if (v.suno_prompt) {
-      row.querySelector(".prompt-copy-slot-suno").appendChild(copyBtn(v.suno_prompt));
-    }
-    container.appendChild(row);
-  });
+
+      <div class="row">
+        <button id="run-video-btn" ${running ? "disabled" : ""}>${running ? "Running…" : "Run this video"}</button>
+      </div>
+    </div>
+  `;
+
+  const gfSlot = container.querySelector(".prompt-copy-slot-gf");
+  if (v.google_flow_video_prompt && gfSlot) gfSlot.appendChild(copyBtn(v.google_flow_video_prompt));
+  const sunoSlot = container.querySelector(".prompt-copy-slot-suno");
+  if (v.suno_prompt && sunoSlot) sunoSlot.appendChild(copyBtn(v.suno_prompt));
+
+  const runBtn = container.querySelector("#run-video-btn");
+  if (runBtn) runBtn.addEventListener("click", runActiveVideo);
 }
 
-el("start-batch-btn").addEventListener("click", async () => {
-  const errBox = el("start-batch-error");
+async function runActiveVideo() {
+  const errBox = el("run-error");
   errBox.textContent = "";
 
   if (!contentFilePath) {
     errBox.textContent = "Parse a content file first.";
+    return;
+  }
+
+  const panel = document.querySelector(".video-detail-panel");
+  const vn = activeVideoNumber;
+  const clipFile = panel.querySelector(".clip-input").files[0];
+  const audioFile = panel.querySelector(".audio-input").files[0];
+  const thumbFile = panel.querySelector(".thumb-input").files[0];
+
+  if (!clipFile || !audioFile) {
+    errBox.textContent = "Attach both a clip and a track before running this video.";
     return;
   }
 
@@ -174,69 +232,44 @@ el("start-batch-btn").addEventListener("click", async () => {
   fd.append("category_id", el("category-id").value);
   fd.append("output_dir", el("output-dir").value);
 
-  const rows = [];
-  const rowEls = document.querySelectorAll(".video-row");
-  let missing = [];
+  fd.append(`clip_${vn}`, clipFile);
+  fd.append(`audio_${vn}`, audioFile);
+  if (thumbFile) fd.append(`thumbnail_${vn}`, thumbFile);
 
-  rowEls.forEach((rowEl) => {
-    if (!rowEl.querySelector(".include-check").checked) return;
-
-    const vn = rowEl.dataset.videoNumber;
-    const clipFile = rowEl.querySelector(".clip-input").files[0];
-    const audioFile = rowEl.querySelector(".audio-input").files[0];
-    const thumbFile = rowEl.querySelector(".thumb-input").files[0];
-
-    if (!clipFile || !audioFile) {
-      missing.push(vn);
-      return;
-    }
-
-    fd.append(`clip_${vn}`, clipFile);
-    fd.append(`audio_${vn}`, audioFile);
-    if (thumbFile) fd.append(`thumbnail_${vn}`, thumbFile);
-
-    const publishLocal = rowEl.querySelector(".publish-input").value;
-    rows.push({
-      video_number: Number(vn),
-      hours: Number(rowEl.querySelector(".hours-input").value),
-      privacy: rowEl.querySelector(".privacy-input").value,
-      publish_at: publishLocal ? new Date(publishLocal).toISOString().replace(/\.\d{3}Z$/, "Z") : null,
-      upload: rowEl.querySelector(".upload-check").checked,
-    });
-  });
-
-  if (missing.length) {
-    errBox.textContent = `Missing clip and/or audio file for video(s): ${missing.join(", ")}`;
-    return;
-  }
-  if (!rows.length) {
-    errBox.textContent = "No videos included in this batch.";
-    return;
-  }
-
+  const publishLocal = panel.querySelector(".publish-input").value;
+  const rows = [{
+    video_number: vn,
+    hours: Number(panel.querySelector(".hours-input").value),
+    privacy: panel.querySelector(".privacy-input").value,
+    publish_at: publishLocal ? new Date(publishLocal).toISOString().replace(/\.\d{3}Z$/, "Z") : null,
+    upload: panel.querySelector(".upload-check").checked,
+  }];
   fd.append("rows", JSON.stringify(rows));
 
-  el("start-batch-btn").disabled = true;
+  const runBtn = el("run-video-btn");
+  runBtn.disabled = true;
+  runBtn.textContent = "Starting…";
+
   const res = await fetch("/api/jobs/batch", { method: "POST", body: fd });
   const data = await res.json();
-  el("start-batch-btn").disabled = false;
 
-  if (data.error) {
-    errBox.textContent = data.error;
+  const entry = (data.jobs || [])[0];
+  if (!entry || entry.error) {
+    errBox.textContent = (entry && entry.error) || data.error || "Could not start this video.";
+    runBtn.disabled = false;
+    runBtn.textContent = "Run this video";
     return;
   }
 
-  const failed = (data.jobs || []).filter((j) => j.error);
-  if (failed.length) {
-    errBox.textContent = "Some videos couldn't be queued: " + failed.map((f) => `#${f.video_number} (${f.error})`).join(", ");
-  }
-
-  const newIds = (data.jobs || []).filter((j) => j.job_id).map((j) => j.job_id);
-  knownJobIds = [...new Set([...knownJobIds, ...newIds])];
+  jobsByVideo[vn] = { status: "queued" };
+  renderVideoList();
+  runBtn.textContent = "Running…";
 
   el("jobs-card").style.display = "";
   startPolling();
-});
+}
+
+// ---- 4. Progress ----
 
 function startPolling() {
   if (pollTimer) return;
@@ -249,15 +282,27 @@ function stopPolling() {
   pollTimer = null;
 }
 
-const TERMINAL_STATUSES = ["done", "error", "rejected", "awaiting_approval"];
+const RUNNING_STATUSES = ["queued", "assembling", "queued_upload", "uploading"];
 
 async function pollJobs() {
   const res = await fetch("/api/jobs");
   const jobs = await res.json();
+
+  jobs.forEach((j) => { jobsByVideo[j.video_number] = j; });
+  renderVideoList();
+  if (activeVideoNumber != null) {
+    const runBtn = el("run-video-btn");
+    const activeJob = jobsByVideo[activeVideoNumber];
+    if (runBtn && activeJob) {
+      runBtn.disabled = RUNNING_STATUSES.includes(activeJob.status);
+      runBtn.textContent = RUNNING_STATUSES.includes(activeJob.status) ? "Running…" : "Run this video";
+    }
+  }
+
   renderJobs(jobs);
 
-  const allSettled = jobs.length > 0 && jobs.every((j) => TERMINAL_STATUSES.includes(j.status));
-  if (allSettled) stopPolling();
+  const stillRunning = jobs.some((j) => RUNNING_STATUSES.includes(j.status));
+  if (!stillRunning) stopPolling();
 }
 
 function renderJobs(jobs) {

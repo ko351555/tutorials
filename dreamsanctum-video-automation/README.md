@@ -53,9 +53,10 @@ limits ffmpeg doesn't have.
    - `client_secrets.json` and `token.json` are already in `.gitignore` —
      never commit them, they grant upload access to your channel.
 
-## Web UI (recommended for a batch of ~10)
+## Web UI (recommended)
 
-A local browser UI wraps the whole batch flow so you don't type CLI commands:
+A local browser UI wraps the whole flow so you don't type CLI commands. It
+works through videos **one at a time**, not as one big batch form:
 
 ```
 python webui/app.py
@@ -63,16 +64,19 @@ python webui/app.py
 ```
 
 From there:
-1. Upload the content file for this batch → it parses and lists every `VIDEO <n>`.
-   Each row has a collapsible **"Prompts for Google Flow & Suno"** section
-   with the exact prompt text and a Copy button, so you don't have to go dig
-   it out of the PDF while you're generating the clip/track by hand.
-2. Attach the clip + track (and optional thumbnail) you downloaded from
-   Google Flow / Suno for each video, set hours/privacy/schedule per row.
-   Testing with just one video first? Uncheck every other row (or only
-   attach files to the one you want) before starting.
-3. Click **Start batch** — each video assembles (ffmpeg) one at a time with
-   a live progress bar and expandable log.
+1. Upload the content file for this batch → it parses and lists every
+   `VIDEO <n>` as a clickable row (title, tag count).
+2. Click one video. Its detail panel opens with the **Google Flow prompt**
+   and **Suno prompt** (each with a Copy button) — go generate that clip and
+   track in those two apps, using those exact prompts.
+3. Attach the clip + track (and optional thumbnail) you downloaded, confirm
+   the hours (pre-filled by reading "8 Hours" / "5 Hours" etc. straight out
+   of the video's own title — override it if you want), and click
+   **Run this video**.
+4. It assembles (ffmpeg loops the clip and track to the target length and
+   muxes them together) with a live progress bar. Pick the next video from
+   the list whenever you're ready — nothing forces you to queue all 10 up
+   front.
 
 **Nothing uploads to YouTube automatically.** If a video's "Upload to
 YouTube" box is checked, its job stops right after assembly with status

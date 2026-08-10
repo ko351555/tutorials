@@ -26,7 +26,7 @@
     </section>
 
     <section class="card" id="settings-card" style="display:none">
-      <h2>2. Batch settings</h2>
+      <h2>2. Settings (applies to whichever video you run)</h2>
       <div class="settings-grid">
         <label>Output folder
           <input type="text" id="output-dir" value="output">
@@ -45,12 +45,11 @@
     </section>
 
     <section class="card" id="videos-card" style="display:none">
-      <h2>3. Attach files per video</h2>
-      <div id="video-rows"></div>
-      <div class="row">
-        <button id="start-batch-btn">Start batch</button>
-        <span id="start-batch-error" class="error"></span>
-      </div>
+      <h2>3. Pick a video to work on</h2>
+      <p class="hint">Videos are handled one at a time. Pick one, generate its clip/track, attach them, and run it — then come back and pick the next.</p>
+      <div id="video-list"></div>
+      <div id="video-detail"></div>
+      <div id="run-error" class="error"></div>
     </section>
 
     <section class="card" id="jobs-card" style="display:none">

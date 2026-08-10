@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import queue
+import re
 import sys
 import threading
 import uuid
@@ -42,6 +43,16 @@ from youtube_upload import (  # noqa: E402
 from create_video import assemble_only, upload_only  # noqa: E402
 
 app = Flask(__name__)
+
+HOURS_IN_TITLE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*Hours?", re.IGNORECASE)
+
+
+def _guess_hours(youtube_title: str) -> float | None:
+    """Pull "8 Hours" / "5 Hour" etc. out of the title so the UI can
+    pre-fill the hours field with what the script actually calls for.
+    """
+    m = HOURS_IN_TITLE_RE.search(youtube_title or "")
+    return float(m.group(1)) if m else None
 
 UPLOAD_ROOT = ROOT / "webui_uploads"
 UPLOAD_ROOT.mkdir(exist_ok=True)
@@ -201,6 +212,7 @@ def parse_content():
                 "tag_count": len(v.youtube_tags),
                 "google_flow_video_prompt": v.google_flow_video_prompt,
                 "suno_prompt": v.suno_prompt,
+                "suggested_hours": _guess_hours(v.youtube_title),
             }
             for v in videos
         ],
