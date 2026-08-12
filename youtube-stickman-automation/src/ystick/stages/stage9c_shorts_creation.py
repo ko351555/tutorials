@@ -32,20 +32,46 @@ Total narration length: {total_ms}ms.
 
 Pick the {min_s}-{max_s} second contiguous window (by sentence boundaries)
 that works best as a standalone YouTube Short — it must make sense with NO
-context from the rest of the video: a complete hook and payoff, not a
-fragment that references "as I said before" or trails off unresolved. The
-video's opening hook (per this channel's format) is usually the strongest
-candidate, but pick a later reframe/payoff moment instead if it's genuinely
-more self-contained and punchy on its own.
+context from the rest of the video AND land on a genuine conclusion: a
+complete hook and payoff, ending on an actual punchline/reveal/takeaway
+sentence — never a fragment that trails off mid-buildup, references "as I
+said before," or stops right before the payoff would land. This channel's
+videos are structured hook -> framework -> steps -> punchy takeaway, so the
+video's OPENING alone is rarely a complete arc on its own — it's usually
+just the setup. Prefer either (a) the hook plus its immediate payoff/reveal
+if that lands within the window, or (b) the closing reframe/takeaway
+moment, which is more reliably self-contained since it's already the
+resolution. Do not pick a window whose last sentence is still building up
+to something the window doesn't include.
 
 Respond with a JSON object: {{"start_ms": <int, a sentence's start_ms>,
 "end_ms": <int, a sentence's end_ms>, "reason": "<one line>"}}.
 """
 
 
+def _fallback_window(sentences: list[dict], min_s: int, max_s: int) -> tuple[int, int]:
+    """Used when the LLM's pick is missing/invalid/off-brief. Anchors to the
+    video's actual ending rather than its opening: per this channel's
+    hook -> framework -> steps -> takeaway structure, the closing sentences
+    are the resolution and reliably self-contained, whereas "the first N
+    seconds" is almost always mid-setup with no payoff yet — exactly the
+    "cuts off mid-story" failure mode this replaces. Always snapped to
+    sentence boundaries so it never cuts mid-sentence either."""
+    if not sentences:
+        return 0, 0
+    end_ms = sentences[-1]["end_ms"]
+    max_ms = max_s * 1000
+    start_ms = sentences[0]["start_ms"]
+    for sent in reversed(sentences):
+        if end_ms - sent["start_ms"] > max_ms:
+            break
+        start_ms = sent["start_ms"]
+    return start_ms, end_ms
+
+
 def _select_window(ctx: ProjectContext, script_text: str, sentences: list[dict], min_s: int, max_s: int) -> tuple[int, int]:
     total_ms = sentences[-1]["end_ms"] if sentences else 0
-    fallback = (0, min(max_s * 1000, total_ms))
+    fallback = _fallback_window(sentences, min_s, max_s)
 
     sentence_list = "\n".join(f"[{s['start_ms']}-{s['end_ms']}] {s['text']}" for s in sentences)
     prompt = PROMPT_TEMPLATE.format(

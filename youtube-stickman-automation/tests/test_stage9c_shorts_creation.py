@@ -64,7 +64,32 @@ def test_select_window_falls_back_when_duration_is_wildly_too_short():
     )
     sentences = [_sentence("a", 0, 100000)]
     start, end = _select_window(ctx, "full script", sentences, min_s=40, max_s=50)
-    assert (start, end) == (0, 50000)  # fallback, not the 2s pick
+    # Fallback anchors to the true ending and snaps to sentence boundaries,
+    # never mid-sentence — with only one 100s sentence, there's no earlier
+    # boundary to start from, so the whole sentence is kept rather than the
+    # 2s LLM pick or an arbitrary mid-sentence cutoff.
+    assert (start, end) == (0, 100000)
+
+
+def test_fallback_window_anchors_to_ending_not_opening():
+    """The bug this replaces: a naive "first N seconds" fallback captured
+    only the hook/setup for this channel's hook -> framework -> steps ->
+    takeaway structure, never the resolution at the end. The fallback must
+    walk backward from the real ending, snapped to sentence boundaries."""
+    ctx = ProjectContext(
+        project_id="t", project_dir=Path("/tmp"), settings=None, secrets=Secrets(),
+        extra={"llm": _StubLLMClient("not json at all")},
+    )
+    sentences = [
+        _sentence("hook", 0, 10000),
+        _sentence("framework", 10000, 200000),
+        _sentence("step one", 200000, 220000),
+        _sentence("step two", 220000, 240000),
+        _sentence("takeaway", 240000, 260000),
+    ]
+    start, end = _select_window(ctx, "full script", sentences, min_s=10, max_s=30)
+    assert end == 260000  # the true ending
+    assert start == 240000  # snapped to the "takeaway" sentence boundary
 
 
 # -- _slice_scenes / _slice_sentences ------------------------------------------
