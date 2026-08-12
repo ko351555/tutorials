@@ -57,7 +57,12 @@ class LLMClient:
         except subprocess.TimeoutExpired as exc:
             raise RetryableError(f"claude CLI timed out: {exc}") from exc
         if proc.returncode != 0:
-            raise RetryableError(f"claude CLI exited {proc.returncode}: {proc.stderr[:2000]}")
+            # Some claude CLI failures (auth/usage-limit errors in
+            # particular) print to stdout, not stderr — show both so the
+            # real cause isn't silently dropped (see the ffmpeg fix in
+            # video_assembly.py for the same class of bug).
+            detail = proc.stderr.strip() or proc.stdout.strip() or "(no output on stdout or stderr)"
+            raise RetryableError(f"claude CLI exited {proc.returncode}: {detail[:2000]}")
         try:
             envelope = json.loads(proc.stdout)
         except json.JSONDecodeError as exc:
