@@ -107,23 +107,39 @@ skeleton Stage 2 should follow when it writes the script:
   should support the same theme as that week's long-form pieces rather
   than be 14 unrelated ideas.
 
-## Starter topics (examples of the pattern — don't repeat verbatim)
+## This week's videos
+
+The two long-form videos planned for this week. These are the buttons
+shown on the sidebar's "💡 Starter ideas" — click one to seed a new
+project. **Update this list every week** as your channel calendar
+advances; the UI reads it live from this file.
+
+Weekly plan cadence: 2 long-form (Tue + Fri) + 14 Shorts across the
+week; Shorts should support the same theme as that week's long-form.
+The Shorts are derived per-project via the "Also generate a Short"
+checkbox on the new-project screen — not every long-form needs one.
+
+1. "The Psychology of Procrastination — Explained With Stickmen" — Mindset pillar (Tue long-form; pair with a companion Short)
+2. "The Wealth Flywheel — How Ordinary People Build Wealth" — Wealth pillar (Fri long-form; pair with a companion Short)
+
+## Evergreen title bar (style/quality reference — do not copy verbatim)
 
 Reference examples of the formula working, ranked by CPM + shareability.
 Stage 1 should generate **new** ideas in this same spirit each time it
-runs, not reuse this list once it's exhausted — treat it as "here's what
-good looks like," not a fixed queue.
+runs — treat this as "here's what good looks like," not a fixed queue,
+and not as extra buttons in the UI (only the numbered "This week's
+videos" section is surfaced there).
 
-1. "The 1% Rule That Made Warren Buffett Rich" — compounding, wealth pillar
-2. "Why Smart People Stay Poor (The Bird in Hand Bias)" — money/psychology crossover
-3. "The 2-Minute Rule That Fixes Procrastination Forever" — productivity pillar
-4. "Parkinson's Law: Why You Never Have Enough Time" — productivity/psychology crossover
-5. "How AI Will Replace These 5 Jobs by 2030" — AI pillar, fear-based hook, huge CTR
-6. "The Pareto Principle: Do 20% of This, Get 80% Results" — evergreen framework
-7. "Loss Aversion: The Bias That's Keeping You Broke" — money/psychology crossover
-8. "5 Habits of People Who Retire Before 40" — wealth pillar, high CPM
-9. "The Dopamine Trap: Why You Can't Focus Anymore" — psychology pillar
-10. "How to Use AI to 10x Your Income in 2026" — AI + wealth crossover
+- The 1% Rule That Made Warren Buffett Rich — compounding, wealth pillar
+- Why Smart People Stay Poor (The Bird in Hand Bias) — money/psychology crossover
+- The 2-Minute Rule That Fixes Procrastination Forever — productivity pillar
+- Parkinson's Law: Why You Never Have Enough Time — productivity/psychology crossover
+- How AI Will Replace These 5 Jobs by 2030 — AI pillar, fear-based hook, huge CTR
+- The Pareto Principle: Do 20% of This, Get 80% Results — evergreen framework
+- Loss Aversion: The Bias That's Keeping You Broke — money/psychology crossover
+- 5 Habits of People Who Retire Before 40 — wealth pillar, high CPM
+- The Dopamine Trap: Why You Can't Focus Anymore — psychology pillar
+- How to Use AI to 10x Your Income in 2026 — AI + wealth crossover
 
 ## Instruction for topic generation
 

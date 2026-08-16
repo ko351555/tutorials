@@ -188,5 +188,30 @@ def test_shorts_stage_skips_when_disabled(tmp_path: Path):
 
     result = ShortsCreationStage().run(ctx)
 
-    assert result == {"skipped": True}
+    assert result["skipped"] is True
     assert not (tmp_path / STAGE_FOLDERS["shorts_creation"] / "shorts_cut.mp4").exists()
+
+
+def test_shorts_stage_skips_when_per_project_flag_is_false_even_if_global_enabled(tmp_path: Path):
+    """Global settings can leave shorts on for the channel while an
+    individual project opts out via the new-project checkbox."""
+    ctx = _make_ctx(tmp_path)
+    ctx.extra["generate_short"] = False
+
+    result = ShortsCreationStage().run(ctx)
+
+    assert result["skipped"] is True
+    assert not (tmp_path / STAGE_FOLDERS["shorts_creation"] / "shorts_cut.mp4").exists()
+
+
+def test_shorts_stage_runs_when_per_project_flag_is_true_even_if_global_disabled(tmp_path: Path):
+    """And the mirror case: a project can opt in even if the channel-wide
+    default has shorts turned off."""
+    ctx = _make_ctx(tmp_path)
+    ctx.settings["stages"]["shorts_creation"]["enabled"] = False
+    ctx.extra["generate_short"] = True
+
+    result = ShortsCreationStage().run(ctx)
+
+    assert result.get("skipped") is not True
+    assert (tmp_path / STAGE_FOLDERS["shorts_creation"] / "shorts_cut.mp4").exists()

@@ -98,14 +98,23 @@ class Orchestrator:
         return self.project_dir(project_id) / PROJECT_META_FILENAME
 
     def init_project(
-        self, project_id: str, seed_idea: str = "", *, target_minutes: int | None = None, mock: bool = False
+        self,
+        project_id: str,
+        seed_idea: str = "",
+        *,
+        target_minutes: int | None = None,
+        mock: bool = False,
+        generate_short: bool | None = None,
     ) -> None:
         """Creates the project and durably records what it was asked to
         make: the seed idea (or blank for "auto-pick from channel topics"),
-        the target narration length, and whether it runs in mock mode. This
-        is the single source of truth both the CLI and UI read from on every
-        subsequent `run`/`iter_run` call — no need to re-pass it each time,
-        and no drift between the two front ends."""
+        the target narration length, whether it runs in mock mode, and
+        whether to derive a Short from this video. This is the single
+        source of truth both the CLI and UI read from on every subsequent
+        `run`/`iter_run` call — no need to re-pass it each time, and no
+        drift between the two front ends. `generate_short=None` means
+        "use whatever the global settings.yaml default is at run time,"
+        so existing projects created before this field existed still work."""
         self.store.ensure_project(project_id, STAGE_ORDER)
         self.project_dir(project_id).mkdir(parents=True, exist_ok=True)
         write_json(
@@ -114,6 +123,7 @@ class Orchestrator:
                 "seed_idea": seed_idea,
                 "target_minutes": target_minutes or self.blueprint.target_video_length_minutes,
                 "mock": mock,
+                "generate_short": generate_short,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             },
         )
@@ -121,8 +131,15 @@ class Orchestrator:
     def load_project_meta(self, project_id: str) -> dict:
         path = self._project_meta_path(project_id)
         if not path.exists():
-            return {"seed_idea": "", "target_minutes": self.blueprint.target_video_length_minutes, "mock": True}
-        return read_json(path)
+            return {
+                "seed_idea": "",
+                "target_minutes": self.blueprint.target_video_length_minutes,
+                "mock": True,
+                "generate_short": None,
+            }
+        meta = read_json(path)
+        meta.setdefault("generate_short", None)
+        return meta
 
     def _build_context(self, project_id: str, seed_idea: str | None, mock: bool | None, log) -> ProjectContext:
         meta = self.load_project_meta(project_id)
@@ -142,6 +159,7 @@ class Orchestrator:
                 "approvals": approvals,
                 "blueprint": self.blueprint,
                 "target_minutes": meta["target_minutes"],
+                "generate_short": meta.get("generate_short"),
             },
         )
 

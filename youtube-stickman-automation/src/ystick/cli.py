@@ -24,17 +24,23 @@ def new(
         None, "--minutes", help="Target narration length in minutes. Defaults to channel_blueprint.yaml's target_video_length_minutes."
     ),
     mock: bool = typer.Option(False, help="Run with no external API calls (fixture data)."),
+    short: Optional[bool] = typer.Option(
+        None, "--short/--no-short",
+        help="Whether to derive a Short from this video. Omit to use the settings.yaml default.",
+    ),
 ):
     """Create a project from a video idea (or blank for the channel's default topics), and run it up to the first approval gate."""
     orch = Orchestrator()
     project_id = new_project_id(idea or orch.blueprint.name)
-    orch.init_project(project_id, idea, target_minutes=minutes, mock=mock)
+    orch.init_project(project_id, idea, target_minutes=minutes, mock=mock, generate_short=short)
     meta = orch.load_project_meta(project_id)
     log = configure_logging(project_id)
+    short_label = "channel default" if short is None else ("yes" if short else "skipped")
     typer.echo(f"Created project: {project_id}")
     typer.echo(f"  Topic seed:    {idea or '(blank — will auto-pick from channel topics)'}")
     typer.echo(f"  Target length: {meta['target_minutes']} min")
     typer.echo(f"  Mode:          {'mock (no API calls)' if mock else 'live'}")
+    typer.echo(f"  Short:         {short_label}")
     _run_and_report(orch, project_id, log)
 
 

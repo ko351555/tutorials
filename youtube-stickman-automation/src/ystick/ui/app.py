@@ -168,8 +168,8 @@ def sidebar(orch: Orchestrator) -> str | None:
 
     starter_topics = load_starter_topics(PROJECT_ROOT / orch.settings.channel.content_strategy_path)
     if starter_topics:
-        with st.sidebar.expander("💡 Starter ideas", expanded=False):
-            st.caption("From the channel's content strategy — click one to use it below.")
+        with st.sidebar.expander("📅 This week's videos", expanded=True):
+            st.caption("From `config/content_strategy.md` → *This week's videos*. Click one to seed a new project.")
             for i, topic in enumerate(starter_topics):
                 if st.button(topic, key=f"starter_{i}", width='stretch'):
                     st.session_state["new_idea"] = topic
@@ -186,9 +186,22 @@ def sidebar(orch: Orchestrator) -> str | None:
             "Target length (minutes)", min_value=1, max_value=60, value=bp.target_video_length_minutes, key="new_minutes"
         )
         mock = st.checkbox("Mock mode (no API calls, free)", value=True, key="new_mock")
+        # Per-project override — not every long-form warrants a companion
+        # Short (some topics don't clip well, some weeks the Shorts calendar
+        # is already full). Default matches settings.yaml so existing habits
+        # are preserved for anyone who doesn't touch this.
+        default_short = bool(orch.settings.stages.shorts_creation.get("enabled", True))
+        generate_short = st.checkbox(
+            "Also generate a 40-50s YouTube Short from this video",
+            value=default_short,
+            key="new_generate_short",
+            help="When off, the Shorts stage is skipped for this project.",
+        )
         if st.button("Create project", type="primary", width='stretch'):
             project_id = new_project_id(idea or bp.name)
-            orch.init_project(project_id, idea, target_minutes=int(minutes), mock=mock)
+            orch.init_project(
+                project_id, idea, target_minutes=int(minutes), mock=mock, generate_short=generate_short
+            )
             st.session_state["current_project"] = project_id
             st.session_state["_expand_new_project"] = False
             st.rerun()
@@ -244,10 +257,13 @@ def main() -> None:
     advanced_panel(orch, project_id)
 
     st.title(project_id)
+    short_choice = meta.get("generate_short")
+    short_label = "using channel default" if short_choice is None else ("yes" if short_choice else "skipped")
     st.caption(
         f"**Topic:** {meta['seed_idea'] or '(auto — picked from channel topics)'}  ·  "
         f"**Target length:** {meta['target_minutes']} min  ·  "
-        f"**Mode:** {'mock (no API calls)' if meta['mock'] else 'live'}"
+        f"**Mode:** {'mock (no API calls)' if meta['mock'] else 'live'}  ·  "
+        f"**Short:** {short_label}"
     )
     st.caption(f"📂 Output folder: `{project_dir}`")
     render_how_it_works(orch)

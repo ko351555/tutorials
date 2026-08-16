@@ -160,8 +160,13 @@ class ShortsCreationStage(Stage):
         cfg = ctx.settings.stages.shorts_creation
         out_dir = ctx.project_dir / STAGE_FOLDERS[self.name]
 
-        if not cfg.enabled:
-            return {"skipped": True}
+        # Per-project override wins when set (from the new-project checkbox);
+        # None means "fall back to the settings.yaml global default," which
+        # is what every project created before the checkbox existed carries.
+        project_choice = ctx.extra.get("generate_short")
+        should_run = cfg.enabled if project_choice is None else bool(project_choice)
+        if not should_run:
+            return {"skipped": True, "reason": "generate_short=False for this project"}
 
         start_ms, end_ms = _select_window(
             ctx, script["text"], transcript["sentences"], cfg.target_seconds_min, cfg.target_seconds_max
