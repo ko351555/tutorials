@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 import typer
 
 from ystick.approvals import describe_pending
-from ystick.config import load_secrets
+from ystick.config import PROJECT_ROOT, load_secrets
+from ystick.core.batch import run_plan
 from ystick.core.orchestrator import GATE_AFTER_STAGE, Orchestrator
 from ystick.integrations import canva_oauth
 from ystick.logging_conf import configure_logging
@@ -121,6 +123,51 @@ def canva_auth():
     typer.echo("\nSuccess. Add this to your .env:\n")
     typer.echo(f"CANVA_REFRESH_TOKEN={tokens['refresh_token']}\n")
     typer.echo("Canva branding will work automatically from the next pipeline run.")
+
+
+@app.command("batch")
+def batch(
+    plan: Path = typer.Argument(
+        Path("config/weekly_plan.yaml"),
+        help="Path to a weekly_plan.yaml file. Defaults to config/weekly_plan.yaml.",
+    ),
+    mock: Optional[bool] = typer.Option(
+        None, "--mock/--no-mock",
+        help="Override the mock flag from the plan for every project (useful for a dry run).",
+    ),
+):
+    """Run every project in a weekly plan fully and automatically.
+
+    Reads config/weekly_plan.yaml (or a custom path), creates a pipeline
+    project for each entry, and runs it all the way through with no manual
+    approval steps — topic_selection auto-picks the highest-scored idea,
+    script/storyboard/final review gates are bypassed, and the Shorts toggle
+    is honoured per-entry.
+
+    Use --mock to do a free dry run over all entries before committing API
+    spend.
+    """
+    if not plan.exists():
+        plan = PROJECT_ROOT / plan
+    if not plan.exists():
+        typer.echo(f"Plan file not found: {plan}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"Running batch from: {plan}\n")
+    results = []
+    for entry, result in run_plan(plan, mock_override=mock):
+        icon = "✅" if result.outcome == "done" else "❌"
+        typer.echo(f"{icon} [{result.project_id}] {entry.title[:60]}")
+        if result.outcome == "failed":
+            typer.echo(f"   Error: {result.error}")
+        results.append(result)
+
+    typer.echo(f"\n{'─' * 60}")
+    done = sum(1 for r in results if r.outcome == "done")
+    failed = sum(1 for r in results if r.outcome == "failed")
+    typer.echo(f"Batch complete: {done} succeeded, {failed} failed out of {len(results)} projects.")
+    if failed:
+        raise typer.Exit(1)
 
 
 @app.command("force-from")

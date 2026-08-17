@@ -10,6 +10,7 @@ from __future__ import annotations
 import streamlit as st
 
 from ystick.config import PROJECT_ROOT
+from ystick.core.batch import load_plan, run_entry
 from ystick.core.orchestrator import GATE_AFTER_STAGE, STAGE_TO_GATE, Orchestrator
 from ystick.core.pipeline import STAGE_DESCRIPTIONS, STAGE_LABELS, STAGE_ORDER
 from ystick.state.models import AWAITING_APPROVAL, DONE, FAILED, RUNNING
@@ -125,6 +126,48 @@ def find_blocking_condition(orch: Orchestrator, project_id: str, status_by_stage
     return None, None
 
 
+def run_batch_with_progress(orch: Orchestrator, plan_path, mock_override: bool | None = None) -> None:
+    """Runs every entry in the weekly plan one by one, showing a live
+    progress table in the main area. Auto-approves all gates."""
+    try:
+        entries = load_plan(plan_path)
+    except Exception as exc:
+        st.error(f"Could not read weekly plan: {exc}")
+        return
+
+    if mock_override is not None:
+        for e in entries:
+            e.mock = mock_override
+
+    total = len(entries)
+    mode_label = "mock dry run" if (mock_override or (total > 0 and entries[0].mock)) else "live"
+    st.subheader(f"Running week batch ({mode_label}) — {total} projects")
+    progress = st.progress(0.0, text="Starting batch…")
+    rows_area = st.empty()
+
+    results = []
+    for i, entry in enumerate(entries):
+        progress.progress(i / total, text=f"{i + 1}/{total}: {entry.title[:50]}…")
+        result = run_entry(orch, entry)
+        results.append({
+            "Title": entry.title[:55],
+            "Min": entry.minutes,
+            "Short": "yes" if entry.short else "—",
+            "Result": "✅" if result.outcome == "done" else f"❌ {result.outcome}",
+            "Project": result.project_id,
+        })
+        rows_area.dataframe(results, hide_index=True, use_container_width=True)
+
+    progress.progress(1.0, text="Batch complete")
+    done = sum(1 for r in results if r["Result"] == "✅")
+    failed = total - done
+    if failed:
+        st.error(f"{done} succeeded, {failed} failed — see project details above.")
+    else:
+        st.success(f"All {done} projects finished successfully!")
+    st.rerun()
+
+
 def render_how_it_works(orch: Orchestrator) -> None:
     bp = orch.blueprint
     with st.expander("ℹ️ How this pipeline starts and ends — and what to expect at each stage", expanded=False):
@@ -166,15 +209,25 @@ def sidebar(orch: Orchestrator) -> str | None:
 
     projects = orch.list_projects()
 
+    plan_path = PROJECT_ROOT / "config" / "weekly_plan.yaml"
     starter_topics = load_starter_topics(PROJECT_ROOT / orch.settings.channel.content_strategy_path)
-    if starter_topics:
+    if starter_topics or plan_path.exists():
         with st.sidebar.expander("📅 This week's videos", expanded=True):
-            st.caption("From `config/content_strategy.md` → *This week's videos*. Click one to seed a new project.")
-            for i, topic in enumerate(starter_topics):
-                if st.button(topic, key=f"starter_{i}", width='stretch'):
-                    st.session_state["new_idea"] = topic
-                    st.session_state["_expand_new_project"] = True
+            if plan_path.exists():
+                st.caption("Run the full week's batch automatically — no approvals, no waiting.")
+                batch_mock = st.checkbox("Mock mode (free dry run)", value=True, key="batch_mock")
+                if st.button("▶ Run week", type="primary", width="stretch", key="run_week"):
+                    st.session_state["_batch_run"] = True
+                    st.session_state["_batch_mock"] = batch_mock
                     st.rerun()
+                st.divider()
+            if starter_topics:
+                st.caption("Or click a title to seed one project at a time:")
+                for i, topic in enumerate(starter_topics):
+                    if st.button(topic, key=f"starter_{i}", width='stretch'):
+                        st.session_state["new_idea"] = topic
+                        st.session_state["_expand_new_project"] = True
+                        st.rerun()
 
     with st.sidebar.expander("➕ New project", expanded=st.session_state.get("_expand_new_project", not projects)):
         idea = st.text_input(
@@ -245,6 +298,15 @@ def advanced_panel(orch: Orchestrator, project_id: str) -> None:
 def main() -> None:
     orch = get_orchestrator()
     project_id = sidebar(orch)
+
+    # Batch run triggered by "▶ Run week" button — takes over the whole
+    # main area while running, then clears and returns to normal view.
+    if st.session_state.pop("_batch_run", False):
+        batch_mock = st.session_state.pop("_batch_mock", True)
+        plan_path = PROJECT_ROOT / "config" / "weekly_plan.yaml"
+        run_batch_with_progress(orch, plan_path, mock_override=batch_mock)
+        return
+
     if project_id is None:
         st.title(f"🎬 {orch.blueprint.name}")
         st.write("Create a project in the sidebar to get started.")
