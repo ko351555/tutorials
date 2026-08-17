@@ -1,0 +1,82 @@
+# Weekly content plan — edit every Monday before you run the batch.
+#
+# `ystick batch config/weekly_plan.yaml`  — runs all projects fully, no waiting
+# "▶ Run week" button in the Streamlit sidebar — same thing, one click
+#
+# Each entry creates one pipeline project:
+#   title   : the video idea seeded into Stage 1 (topic discovery)
+#   minutes : target narration length (1-2 for Shorts, 7-10 for long-form)
+#   short   : true  → also derive a 40-50s companion Short from the long-form
+#             false → no companion Short (Shorts-only videos don't need one)
+#   mock    : true  → dry run, no API calls; omit to default to false (live)
+
+week: "2026-W33"   # ISO week — update each Monday
+
+projects:
+
+  # ── Long-form videos (Tue + Fri) ──────────────────────────────────────────
+  - title: "The Psychology of Procrastination — Explained With Stickmen"
+    minutes: 8
+    short: true
+
+  - title: "The Wealth Flywheel — How Ordinary People Build Wealth"
+    minutes: 8
+    short: true
+
+  # ── Companion Shorts — Procrastination theme (Mon / Tue / Wed) ────────────
+  - title: "You're not lazy. Here's what procrastination actually is."
+    minutes: 1
+    short: false
+
+  - title: "The 5-second trick to start difficult tasks"
+    minutes: 1
+    short: false
+
+  - title: "Why your brain chooses TikTok over your goals"
+    minutes: 1
+    short: false
+
+  - title: "The procrastination loop in 30 seconds"
+    minutes: 1
+    short: false
+
+  - title: "Your environment is making you procrastinate"
+    minutes: 1
+    short: false
+
+  - title: "The 2-minute rule explained"
+    minutes: 1
+    short: false
+
+  - title: "Motivation isn't the problem"
+    minutes: 1
+    short: false
+
+  - title: "Use this 3-step anti-procrastination system"
+    minutes: 1
+    short: false
+
+  # ── Companion Shorts — Wealth Flywheel theme (Thu / Fri / Sat / Sun) ──────
+  - title: "Your salary isn't your wealth"
+    minutes: 1
+    short: false
+
+  - title: "Assets vs liabilities in 30 seconds"
+    minutes: 1
+    short: false
+
+  - title: "Why lifestyle inflation keeps you broke"
+    minutes: 1
+    short: false
+
+  - title: "The compound-interest snowball"
+    minutes: 1
+    short: false
+
+  - title: "The 4-step wealth flywheel"
+    minutes: 1
+    short: false
+
+  - title: "One money habit to start tomorrow"
+    minutes: 1
+    short: false

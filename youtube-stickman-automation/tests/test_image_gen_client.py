@@ -1,0 +1,245 @@
+import base64
+from pathlib import Path
+
+import pytest
+
+from ystick.config import Secrets
+from ystick.core.exceptions import FatalError
+from ystick.integrations import image_gen_client as igc_module
+from ystick.integrations.image_gen_client import ImageGenClient
+
+
+def test_mock_mode_ignores_provider(tmp_path: Path):
+    client = ImageGenClient(Secrets(image_gen_provider="gemini"), mock=True)
+    out_path = tmp_path / "scene_001" / "image.png"
+    result = client.generate("a stickman", out_path)
+    assert result == out_path
+    assert out_path.exists()
+    assert out_path.stat().st_size > 0
+
+
+def test_openai_provider_fails_fast_without_key(tmp_path: Path):
+    client = ImageGenClient(Secrets(image_gen_provider="openai", image_gen_api_key=""), mock=False)
+    with pytest.raises(FatalError, match="IMAGE_GEN_API_KEY"):
+        client.generate("a stickman", tmp_path / "image.png")
+
+
+def test_gemini_provider_fails_fast_without_key(tmp_path: Path):
+    client = ImageGenClient(Secrets(image_gen_provider="gemini", gemini_api_key=""), mock=False)
+    with pytest.raises(FatalError, match="GEMINI_API_KEY"):
+        client.generate("a stickman", tmp_path / "image.png")
+
+
+def test_unset_gemini_key_does_not_fall_back_to_openai_key(tmp_path: Path):
+    # A stray IMAGE_GEN_API_KEY (for the openai provider) must not be
+    # mistaken for a Gemini key when the provider is switched to gemini.
+    client = ImageGenClient(
+        Secrets(image_gen_provider="gemini", image_gen_api_key="sk-openai-leftover", gemini_api_key=""),
+        mock=False,
+    )
+    with pytest.raises(FatalError, match="GEMINI_API_KEY"):
+        client.generate("a stickman", tmp_path / "image.png")
+
+
+class _FakeResponse:
+    def __init__(self, status_code: int, json_body: dict):
+        self.status_code = status_code
+        self._json_body = json_body
+        self.text = str(json_body)
+
+    def json(self):
+        return self._json_body
+
+
+def test_gemini_request_shape_and_response_parsing(tmp_path: Path, monkeypatch):
+    """Verifies the actual request Gemini expects (contents/parts,
+    generationConfig, key as a query param) and that a well-formed
+    response's inline image data gets decoded and written correctly —
+    without needing a live API key."""
+    captured = {}
+    fake_image_bytes = b"\x89PNG\r\n\x1a\nFAKEIMAGEDATA"
+
+    def fake_post(url, params=None, json=None, timeout=None):
+        captured["url"] = url
+        captured["params"] = params
+        captured["json"] = json
+        return _FakeResponse(
+            200,
+            {
+                "candidates": [
+                    {"content": {"parts": [{"inlineData": {"mimeType": "image/png", "data": base64.b64encode(fake_image_bytes).decode()}}]}}
+                ]
+            },
+        )
+
+    monkeypatch.setattr(igc_module.requests, "post", fake_post)
+
+    reference = tmp_path / "reference.png"
+    reference.write_bytes(b"\x89PNG\r\n\x1a\nREFERENCE")
+    out_path = tmp_path / "scene_001" / "image.png"
+
+    secrets = Secrets(image_gen_provider="gemini", gemini_api_key="test-key")
+    client = ImageGenClient(secrets, mock=False)
+    client.generate("a stickman waving", out_path, reference_image=reference)
+
+    assert captured["url"] == igc_module.gemini_generate_url(secrets.gemini_image_model)
+    assert captured["params"] == {"key": "test-key"}
+    parts = captured["json"]["contents"][0]["parts"]
+    assert parts[0] == {"text": "a stickman waving"}
+    assert parts[1]["inlineData"]["mimeType"] == "image/png"
+    assert base64.b64decode(parts[1]["inlineData"]["data"]) == b"\x89PNG\r\n\x1a\nREFERENCE"
+    assert captured["json"]["generationConfig"]["responseModalities"] == ["TEXT", "IMAGE"]
+
+    assert out_path.read_bytes() == fake_image_bytes
+
+
+def test_gemini_response_with_no_image_raises_fatal(tmp_path: Path, monkeypatch):
+    def fake_post(url, params=None, json=None, timeout=None):
+        return _FakeResponse(200, {"candidates": [{"content": {"parts": [{"text": "sorry, I can't do that"}]}}]})
+
+    monkeypatch.setattr(igc_module.requests, "post", fake_post)
+    client = ImageGenClient(Secrets(image_gen_provider="gemini", gemini_api_key="test-key"), mock=False)
+    with pytest.raises(FatalError, match="no image data"):
+        client.generate("a stickman", tmp_path / "image.png")
+
+
+def test_gemini_retries_without_reference_when_model_refuses_consistency(tmp_path: Path, monkeypatch):
+    """Real production case: Gemini answers a reference-conditioned request
+    with a text-only apology ("wasn't able to maintain all the details
+    from your previous request") instead of an image. Losing style
+    continuity for one scene beats blocking the whole stage — the client
+    should retry once bare (no reference) and succeed, rather than
+    failing outright."""
+    calls = []
+    fake_image_bytes = b"\x89PNG\r\n\x1a\nFAKEIMAGEDATA"
+
+    def fake_post(url, params=None, json=None, timeout=None):
+        has_reference = len(json["contents"][0]["parts"]) > 1
+        calls.append(has_reference)
+        if has_reference:
+            return _FakeResponse(
+                200,
+                {"candidates": [{"content": {"parts": [{"text": "wasn't able to maintain all the details"}]}}]},
+            )
+        return _FakeResponse(
+            200,
+            {"candidates": [{"content": {"parts": [
+                {"inlineData": {"mimeType": "image/png", "data": base64.b64encode(fake_image_bytes).decode()}}
+            ]}}]},
+        )
+
+    monkeypatch.setattr(igc_module.requests, "post", fake_post)
+
+    reference = tmp_path / "reference.png"
+    reference.write_bytes(b"\x89PNG\r\n\x1a\nREFERENCE")
+    out_path = tmp_path / "scene_001" / "image.png"
+
+    client = ImageGenClient(Secrets(image_gen_provider="gemini", gemini_api_key="test-key"), mock=False)
+    result = client.generate("a stickman waving", out_path, reference_image=reference)
+
+    assert result == out_path
+    assert out_path.read_bytes() == fake_image_bytes
+    assert calls == [True, False]  # first attempt with reference, then a bare retry
+
+
+def test_gemini_no_reference_no_image_data_fails_immediately(tmp_path: Path, monkeypatch):
+    """No reference was ever used, so there's no bare fallback to try —
+    must fail on the first attempt, not loop."""
+    calls = []
+
+    def fake_post(url, params=None, json=None, timeout=None):
+        calls.append(1)
+        return _FakeResponse(200, {"candidates": [{"content": {"parts": [{"text": "no image for you"}]}}]})
+
+    monkeypatch.setattr(igc_module.requests, "post", fake_post)
+    client = ImageGenClient(Secrets(image_gen_provider="gemini", gemini_api_key="test-key"), mock=False)
+    with pytest.raises(FatalError, match="no image data"):
+        client.generate("a stickman", tmp_path / "image.png")
+    assert len(calls) == 1
+
+
+def test_gemini_image_model_is_configurable(tmp_path: Path, monkeypatch):
+    """Real production failure: Gemini's default image-gen model ID 404s
+    once Google renames/deprecates it. GEMINI_IMAGE_MODEL must actually
+    change which URL gets called, not just exist as an unused field."""
+    captured = {}
+
+    def fake_post(url, params=None, json=None, timeout=None):
+        captured["url"] = url
+        return _FakeResponse(200, {"candidates": [{"content": {"parts": [{"text": "no image"}]}}]})
+
+    monkeypatch.setattr(igc_module.requests, "post", fake_post)
+    client = ImageGenClient(
+        Secrets(image_gen_provider="gemini", gemini_api_key="test-key", gemini_image_model="some-other-model"),
+        mock=False,
+    )
+    with pytest.raises(FatalError):
+        client.generate("a stickman", tmp_path / "image.png")
+
+    assert captured["url"] == "https://generativelanguage.googleapis.com/v1beta/models/some-other-model:generateContent"
+
+
+def test_gemini_404_gives_actionable_model_not_found_message(tmp_path: Path, monkeypatch):
+    def fake_post(url, params=None, json=None, timeout=None):
+        return _FakeResponse(
+            404,
+            {"error": {"code": 404, "message": "models/x is not found for API version v1beta", "status": "NOT_FOUND"}},
+        )
+
+    monkeypatch.setattr(igc_module.requests, "post", fake_post)
+    client = ImageGenClient(
+        Secrets(image_gen_provider="gemini", gemini_api_key="test-key", gemini_image_model="stale-model"),
+        mock=False,
+    )
+    with pytest.raises(FatalError, match="GEMINI_IMAGE_MODEL") as exc_info:
+        client.generate("a stickman", tmp_path / "image.png")
+    assert "stale-model" in str(exc_info.value)
+
+
+class _RawTextResponse:
+    """Mimics requests.Response closely enough for the 429 zero-quota
+    check, which greps the raw response text rather than parsed JSON."""
+
+    def __init__(self, status_code: int, text: str):
+        self.status_code = status_code
+        self.text = text
+
+
+def test_gemini_zero_quota_429_is_fatal_not_retried(tmp_path: Path, monkeypatch):
+    """Real production error: a 429 with 'limit: 0' means this model has
+    zero free-tier quota at all — image generation commonly requires
+    billing enabled, unlike Gemini's free text tier. Every retry would
+    429 identically, so this must raise FatalError (fail fast with the
+    fix), not RetryableError (burn 5 attempts on a request that can never
+    succeed)."""
+    real_error_text = (
+        '{"error": {"code": 429, "message": "You exceeded your current quota... '
+        "* Quota exceeded for metric: generativelanguage.googleapis.com/"
+        "generate_content_free_tier_input_token_count, limit: 0, model: "
+        'gemini-2.5-flash-preview-image", "status": "RESOURCE_EXHAUSTED"}}'
+    )
+
+    def fake_post(url, params=None, json=None, timeout=None):
+        return _RawTextResponse(429, real_error_text)
+
+    monkeypatch.setattr(igc_module.requests, "post", fake_post)
+    client = ImageGenClient(
+        Secrets(image_gen_provider="gemini", gemini_api_key="test-key", gemini_image_model="gemini-2.5-flash-preview-image"),
+        mock=False,
+    )
+    with pytest.raises(FatalError, match="billing"):
+        client.generate("a stickman", tmp_path / "image.png")
+
+
+def test_gemini_ordinary_rate_limit_429_is_still_retryable(tmp_path: Path, monkeypatch):
+    """A transient per-minute rate limit (nonzero limit) is worth
+    retrying — only the zero-quota case is fatal."""
+    from ystick.core.exceptions import RetryableError
+
+    def fake_post(url, params=None, json=None, timeout=None):
+        return _RawTextResponse(429, '{"error": {"message": "Quota exceeded, limit: 15 requests per minute"}}')
+
+    monkeypatch.setattr(igc_module.requests, "post", fake_post)
+    client = ImageGenClient(Secrets(image_gen_provider="gemini", gemini_api_key="test-key"), mock=False)
+    with pytest.raises(RetryableError):
+        client.generate("a stickman", tmp_path / "image.png")
